@@ -1,0 +1,9 @@
+# Green API Configuration
+# Get these from https://green-api.com/
+GREEN_API_ID=your_green_api_id_here
+GREEN_API_TOKEN=your_green_api_token_here
+GREEN_API_INSTANCE_ID=your_instance_id_here
+
+# Recipient phone number (with country code, no +)
+# Example: 972501234567 for Israel number
+RECIPIENT_PHONE=972501234567 

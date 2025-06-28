@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pill Reminder App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.running { background-color: #d4edda; color: #155724; }
+        .status.stopped { background-color: #f8d7da; color: #721c24; }
+        .status.error { background-color: #fff3cd; color: #856404; }
+        .button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 16px;
+        }
+        .button:hover { background-color: #0056b3; }
+        .button.danger { background-color: #dc3545; }
+        .button.danger:hover { background-color: #c82333; }
+        .button.success { background-color: #28a745; }
+        .button.success:hover { background-color: #218838; }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .message-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .message-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .message-item:last-child { border-bottom: none; }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💊 Pill Reminder App</h1>
+            <p>Daily pill reminders via WhatsApp using Green API</p>
+        </div>
+
+        {% if error %}
+        <div class="error">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <div class="status {{ status.lower() }}">
+            Status: {{ status }}
+        </div>
+
+        <div class="section">
+            <h3>Controls</h3>
+            <button class="button success" onclick="startApp()">Start App</button>
+            <button class="button danger" onclick="stopApp()">Stop App</button>
+            <button class="button" onclick="testReminder()">Send Test Reminder</button>
+            <button class="button" onclick="refreshStatus()">Refresh Status</button>
+        </div>
+
+        {% if scheduler_status %}
+        <div class="section">
+            <h3>Reminder Schedule</h3>
+            <p><strong>Next Reminder:</strong> {{ scheduler_status.next_reminder or 'Not scheduled' }}</p>
+            <p><strong>Last Reminder:</strong> {{ scheduler_status.last_reminder_sent or 'None' }}</p>
+            <p><strong>Timezone:</strong> {{ scheduler_status.timezone }}</p>
+            <p><strong>Recipient:</strong> {{ scheduler_status.recipient }}</p>
+            <p><strong>Message:</strong> {{ scheduler_status.message }}</p>
+        </div>
+        {% endif %}
+
+        {% if message_stats %}
+        <div class="section">
+            <h3>Message Statistics</h3>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-number">{{ message_stats.total_messages }}</div>
+                    <div>Total Messages</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ message_stats.pill_confirmed }}</div>
+                    <div>Pill Confirmed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ message_stats.pill_missed }}</div>
+                    <div>Pill Missed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ message_stats.help_requests }}</div>
+                    <div>Help Requests</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if recent_messages %}
+        <div class="section">
+            <h3>Recent Messages</h3>
+            <div class="message-list">
+                {% for msg in recent_messages %}
+                <div class="message-item">
+                    <strong>{{ msg.timestamp }}</strong><br>
+                    Message: {{ msg.message }}<br>
+                    Action: {{ msg.action or 'unknown' }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function startApp() {
+            fetch('/api/start', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                })
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function stopApp() {
+            fetch('/api/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    if (data.success) {
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                })
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function testReminder() {
+            fetch('/api/test-reminder', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => alert(data.message))
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function refreshStatus() {
+            location.reload();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(refreshStatus, 30000);
+    </script>
+</body>
+</html> 
