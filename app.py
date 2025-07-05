@@ -20,6 +20,31 @@ scheduler = None
 app_running = False
 message_thread = None
 
+def extract_message_content(notification):
+    """Extract message content from Green API notification structure"""
+    # Handle different message types
+    if 'body' in notification:
+        # Legacy format or direct body
+        return notification['body']
+    
+    # New webhook format
+    if 'messageData' in notification:
+        message_data = notification['messageData']
+        
+        # Extended text message
+        if 'extendedTextMessageData' in message_data:
+            return message_data['extendedTextMessageData'].get('text', '')
+        
+        # Text message
+        if 'textMessageData' in message_data:
+            return message_data['textMessageData'].get('textMessage', '')
+        
+        # Other message types can be added here as needed
+        print(f"⚠️ Unsupported message type: {message_data.get('typeMessage', 'unknown')}")
+        return ''
+    
+    return ''
+
 def initialize_app():
     """Initialize the app components"""
     global green_api, message_processor, scheduler
@@ -76,15 +101,33 @@ def start_message_processing():
                 
                 for notification in notifications:
                     if notification.get('receiptId'):
-                        # Process the notification
-                        if 'body' in notification:
-                            response = message_processor.process_message(notification)
+                        # Extract message content
+                        message_content = extract_message_content(notification)
+                        
+                        if message_content:
+                            # Check if the message is from the authorized recipient
+                            sender_chat_id = notification.get('senderData', {}).get('chatId', '')
+                            sender_phone = sender_chat_id.split('@')[0] if '@' in sender_chat_id else sender_chat_id
+                            
+                            if sender_phone != Config.RECIPIENT_PHONE:
+                                print(f"🚫 Ignoring message from unauthorized sender: {sender_phone} (expected: {Config.RECIPIENT_PHONE})")
+                                # Still delete the notification to avoid processing it again
+                                green_api.delete_notification(notification['receiptId'])
+                                continue
+                            
+                            # Create a standardized notification structure for the message processor
+                            processed_notification = {
+                                'body': message_content,
+                                'senderData': notification.get('senderData', {}),
+                                'receiptId': notification.get('receiptId')
+                            }
+                            
+                            response = message_processor.process_message(processed_notification)
                             
                             if response:
                                 # Send response back
-                                sender = notification.get('senderData', {}).get('chatId', '').split('@')[0]
-                                green_api.send_message(sender, response)
-                                print(f"📨 Processed message from {sender}: {notification['body']}")
+                                green_api.send_message(sender_phone, response)
+                                print(f"📨 Processed message from {sender_phone}: {message_content}")
                         
                         # Delete the notification after processing
                         green_api.delete_notification(notification['receiptId'])
@@ -293,18 +336,36 @@ def webhook_handler():
         
         print(f"📨 Received webhook notification: {notification}")
         
-        # Process the notification
-        if notification.get('receiptId') and 'body' in notification:
-            response = message_processor.process_message(notification)
+        # Extract message content
+        message_content = extract_message_content(notification)
+        
+        if message_content:
+            # Check if the message is from the authorized recipient
+            sender_chat_id = notification.get('senderData', {}).get('chatId', '')
+            sender_phone = sender_chat_id.split('@')[0] if '@' in sender_chat_id else sender_chat_id
+            
+            if sender_phone != Config.RECIPIENT_PHONE:
+                print(f"🚫 Ignoring message from unauthorized sender: {sender_phone} (expected: {Config.RECIPIENT_PHONE})")
+                return jsonify({"success": True, "message": "Unauthorized sender ignored"}), 200
+            
+            # Create a standardized notification structure for the message processor
+            processed_notification = {
+                'body': message_content,
+                'senderData': notification.get('senderData', {}),
+                'receiptId': notification.get('receiptId') or notification.get('idMessage')
+            }
+            
+            response = message_processor.process_message(processed_notification)
             
             if response:
                 # Send response back
-                sender = notification.get('senderData', {}).get('chatId', '').split('@')[0]
-                green_api.send_message(sender, response)
-                print(f"📨 Processed webhook message from {sender}: {notification['body']}")
+                green_api.send_message(sender_phone, response)
+                print(f"📨 Processed webhook message from {sender_phone}: {message_content}")
             
-            # Delete the notification
-            green_api.delete_notification(notification['receiptId'])
+            # Delete the notification if we have a receiptId (for polling mode)
+            receipt_id = notification.get('receiptId')
+            if receipt_id:
+                green_api.delete_notification(receipt_id)
         
         return jsonify({"success": True}), 200
         
