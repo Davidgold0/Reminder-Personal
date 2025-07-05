@@ -150,7 +150,8 @@ class GreenAPIClient:
         payload = {
             "webhookUrl": webhook_url,
             "webhookUrlToken": "your_webhook_token_here",  # Optional security token
-            "incomingMessageReceived": True,
+            "markIncomingMessagesReaded": "yes",
+            "incomingWebhook": "yes",
         }
         
         try:
