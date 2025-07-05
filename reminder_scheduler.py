@@ -5,6 +5,8 @@ from datetime import datetime, time as dt_time
 from green_api_client import GreenAPIClient
 from config import Config
 from database import Database
+from openai import OpenAI
+import os
 
 class ReminderScheduler:
     def __init__(self):
@@ -13,21 +15,90 @@ class ReminderScheduler:
         self.db = Database()
         self.last_reminder_sent = None
         
+        # Initialize OpenAI if enabled
+        if Config.OPENAI_ENABLED and Config.OPENAI_API_KEY:
+            self.openai_enabled = True
+            self.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            print("🤖 AI reminder messages enabled")
+        else:
+            self.openai_enabled = False
+            print("🤖 AI reminder messages disabled - using default message")
+    
+    def generate_ai_reminder_message(self) -> str:
+        """
+        Generate a personalized reminder message using AI
+        
+        Returns:
+            AI-generated reminder message in Hebrew
+        """
+        if not self.openai_enabled:
+            return Config.REMINDER_MESSAGE
+        
+        try:
+            system_prompt = """אתה עוזר אישי מצחיק וסרקסטי ששולח תזכורות יומיות לגלולת מניעת הריון. 
+
+המאפיינים שלך:
+- דובר עברית שוטפת
+- מצחיק וסרקסטי (לא רשמי מדי)
+- מכוון לנשים
+- משתמש באימוג'ים מתאימים
+- מגוון הודעות (לא אותו דבר כל יום)
+- ידידותי אבל עם קצת ציניות
+- תמיד מתייחס לכדור/גלולה (לא "תרופה" או "כדור רפואי")
+
+דוגמאות להודעות:
+- "היי יפה! 🕗 8:00 - זמן לכדור! אל תשכחי שאת לא רוצה להיות בהריון 😅💊"
+- "טאק טאק! 🚪 מי שם? הגלולה שלך! היא מחכה כבר 5 דקות... ⏰💊"
+- "היי! 🎯 זוכרת מה צריך לעשות עכשיו? כן, בדיוק - הכדור! 💊✨"
+- "אוקיי, בואי נספור: 1, 2, 3... הגלולה! 🧮💊 לא, זה לא משחק - זה מניעת הריון! 😂"
+- "היי! 🕐 8:00 - הכדור שלך קורא לך! אל תעשי לו אייבי 💊😅"
+
+כללים:
+- תמיד בעברית
+- תמיד עם אימוג'ים
+- מצחיק וסרקסטי
+- לא רשמי מדי
+- קצר (מקסימום 2-3 משפטים)
+- מגוון - אל תחזור על אותו דבר
+- השתמש במונחים: כדור, גלולה (לא תרופה או כדור רפואי)
+- התייחס למניעת הריון (לא לבריאות כללית)"""
+
+            response = self.client.chat.completions.create(
+                model=Config.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "צור תזכורת יומית לגלולת מניעת הריון בשעה 8:00 בערב"}
+                ],
+                max_tokens=150,
+                temperature=0.8  # Add some creativity
+            )
+
+            ai_message = response.choices[0].message.content.strip()
+            print(f"🤖 AI Generated Reminder: {ai_message}")
+            return ai_message
+            
+        except Exception as e:
+            print(f"❌ OpenAI API error generating reminder: {e}")
+            return Config.REMINDER_MESSAGE
+        
     def send_daily_reminder(self):
         """Send the daily pill reminder"""
         try:
             current_time = datetime.now(self.israel_tz)
             print(f"Sending daily pill reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
+            # Generate AI message or use default
+            reminder_message = self.generate_ai_reminder_message()
+            
             # Save reminder to database first
             reminder_id = self.db.save_reminder(
                 scheduled_time=current_time.isoformat(),
-                message=Config.REMINDER_MESSAGE
+                message=reminder_message
             )
             
             response = self.green_api.send_message(
                 phone=Config.RECIPIENT_PHONE,
-                message=Config.REMINDER_MESSAGE
+                message=reminder_message
             )
             
             if 'error' not in response:

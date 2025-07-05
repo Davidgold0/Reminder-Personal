@@ -10,10 +10,10 @@ class MessageProcessor:
     def __init__(self):
         self.db = Database()
         self.response_templates = {
-            "confirm": "Great! I've recorded that you took your pill. Stay healthy! 💪",
-            "missed": "No worries! Please take it as soon as possible. Your health is important! 🏥",
-            "help": "I'm here to remind you to take your pill daily at 8:00 PM. You can respond with:\n- 'taken' or 'yes' to confirm you took it\n- 'missed' if you missed it\n- 'help' for this message",
-            "unknown": "I didn't understand that. Type 'help' for available commands."
+            "confirm": "מעולה! רשמתי שלקחת את הגלולה. תישארי בריאה! 💪",
+            "missed": "אל דאגה! קחי אותה בהקדם האפשרי. הבריאות שלך חשובה! 🏥",
+            "help": "אני כאן כדי להזכיר לך לקחת את הגלולה יומית בשעה 8:00 בערב. את יכולה להגיב עם:\n- 'לקחתי' או 'כן' כדי לאשר שלקחת\n- 'החמצתי' אם החמצת\n- 'עזרה' להודעה הזו",
+            "unknown": "לא הבנתי את זה. תכתבי 'עזרה' לפקודות זמינות."
         }
         
         # Initialize OpenAI if enabled
@@ -42,29 +42,29 @@ class MessageProcessor:
             return None
             
         try:
-            system_prompt = """You are a friendly pill reminder assistant. Your role is to help users manage their daily pill medication.
+            system_prompt = """אתה עוזר אישי ידידותי לתזכורות גלולת מניעת הריון. התפקיד שלך הוא לעזור למשתמשות לנהל את הגלולה היומית שלהן.
 
-Key responsibilities:
-- Confirm when users have taken their pills
-- Provide encouragement and support
-- Handle missed doses with care and urgency
-- Answer questions about medication management
-- Be empathetic and health-focused
+תפקידים עיקריים:
+- לאשר כשהמשתמשות לקחו את הגלולה
+- לספק עידוד ותמיכה
+- לטפל במינונים שהוחמצו בזהירות ודחיפות
+- לענות על שאלות בנוגע לניהול הגלולה
+- להיות אמפתי ומתמקד בבריאות
 
-Available actions:
-- 'taken'/'yes' - User confirms taking the pill
-- 'missed'/'no' - User missed the dose
-- 'help' - User needs assistance
-- Other responses - Handle naturally with AI
+פעולות זמינות:
+- 'לקחתי'/'כן' - המשתמשת מאשרת שלקחה את הגלולה
+- 'החמצתי'/'לא' - המשתמשת החמיצה את המינון
+- 'עזרה' - המשתמשת צריכה עזרה
+- תגובות אחרות - לטפל באופן טבעי עם AI
 
-Keep responses:
-- Friendly and supportive
-- Under 200 characters
-- Include relevant emojis
-- Focus on health and wellness
-- In the same language as the user's message
+שמור על תגובות:
+- ידידותיות ותומכות
+- פחות מ-200 תווים
+- כולל אימוג'ים רלוונטיים
+- מתמקד בבריאות ורווחה
+- באותה שפה כמו הודעת המשתמשת
 
-Context: This is a daily pill reminder system for 8:00 PM."""
+הקשר: זהו מערכת תזכורות יומיות לגלולה בשעה 8:00 בערב."""
 
             response = self.client.responses.create(
                 model=Config.OPENAI_MODEL,
@@ -92,18 +92,21 @@ Context: This is a daily pill reminder system for 8:00 PM."""
         """
         message_lower = message_body.lower().strip()
         
-        # Check for confirmation patterns
-        confirm_patterns = ['taken', 'yes', 'done', 'ok', '✅', 'took', 'taken it', 'swallowed', 'consumed']
+        # Check for confirmation patterns (Hebrew and English)
+        confirm_patterns = ['taken', 'yes', 'done', 'ok', '✅', 'took', 'taken it', 'swallowed', 'consumed',
+                           'לקחתי', 'כן', 'סיימתי', 'אוקיי', 'לקחת', 'בלעתי', 'גמרתי']
         if any(pattern in message_lower for pattern in confirm_patterns):
             return 'pill_confirmed'
         
-        # Check for missed patterns
-        missed_patterns = ['missed', 'no', 'forgot', '❌', 'didn\'t', 'havent', 'haven\'t', 'forgotten']
+        # Check for missed patterns (Hebrew and English)
+        missed_patterns = ['missed', 'no', 'forgot', '❌', 'didn\'t', 'havent', 'haven\'t', 'forgotten',
+                          'החמצתי', 'לא', 'שכחתי', 'לא לקחתי', 'לא לקחת', 'שכחת']
         if any(pattern in message_lower for pattern in missed_patterns):
             return 'pill_missed'
         
-        # Check for help patterns
-        help_patterns = ['help', 'commands', '?', 'what', 'how', 'assist', 'support']
+        # Check for help patterns (Hebrew and English)
+        help_patterns = ['help', 'commands', '?', 'what', 'how', 'assist', 'support',
+                        'עזרה', 'פקודות', 'מה', 'איך', 'תעזור', 'תמיכה', 'מה זה']
         if any(pattern in message_lower for pattern in help_patterns):
             return 'help_requested'
         
@@ -145,11 +148,12 @@ Context: This is a daily pill reminder system for 8:00 PM."""
             if not response:
                 message_lower = message_body.lower().strip()
                 
-                if message_lower in ['taken', 'yes', 'done', 'ok', '✅']:
+                # Check Hebrew and English patterns
+                if message_lower in ['taken', 'yes', 'done', 'ok', '✅', 'לקחתי', 'כן', 'סיימתי', 'אוקיי']:
                     response = self.response_templates['confirm']
-                elif message_lower in ['missed', 'no', 'forgot', '❌']:
+                elif message_lower in ['missed', 'no', 'forgot', '❌', 'החמצתי', 'לא', 'שכחתי']:
                     response = self.response_templates['missed']
-                elif message_lower in ['help', 'commands', '?', 'what']:
+                elif message_lower in ['help', 'commands', '?', 'what', 'עזרה', 'פקודות', 'מה']:
                     response = self.response_templates['help']
                 else:
                     response = self.response_templates['unknown']

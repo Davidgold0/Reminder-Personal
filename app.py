@@ -266,6 +266,31 @@ def test_reminder():
     except Exception as e:
         return jsonify({"success": False, "message": f"Error sending test reminder: {e}"})
 
+@app.route('/api/test-ai-reminder', methods=['POST'])
+def test_ai_reminder():
+    """Test AI reminder message generation"""
+    global scheduler, app_running
+    
+    if not app_running:
+        return jsonify({"success": False, "error": "App is not running"})
+    
+    if not scheduler:
+        return jsonify({"success": False, "error": "Scheduler not initialized"})
+    
+    try:
+        # Generate AI message without sending
+        ai_message = scheduler.generate_ai_reminder_message()
+        
+        return jsonify({
+            "success": True,
+            "message": ai_message,
+            "ai_enabled": scheduler.openai_enabled,
+            "is_ai_generated": ai_message != Config.REMINDER_MESSAGE
+        })
+    except Exception as e:
+        print(f"❌ Error testing AI reminder: {e}")
+        return jsonify({"success": False, "error": f"Error generating AI reminder: {str(e)}"})
+
 @app.route('/api/test-ai-message', methods=['POST'])
 def test_ai_message():
     """Test AI message processing"""

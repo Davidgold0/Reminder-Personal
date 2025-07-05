@@ -14,7 +14,7 @@ class Config:
     
     # Reminder settings
     REMINDER_TIME = "20:00"  # 8:00 PM Israel time
-    REMINDER_MESSAGE = "Time to take your pill! 💊"
+    REMINDER_MESSAGE = "זמן לכדור! 💊"
     
     # Timezone
     TIMEZONE = "Asia/Jerusalem"

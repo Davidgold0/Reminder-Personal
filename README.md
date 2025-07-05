@@ -7,6 +7,7 @@ A Python application that sends daily pill reminders via WhatsApp using Green AP
 - ⏰ **Daily Reminders**: Automatically sends pill reminders at 8:00 PM Israel time
 - 💬 **Message Processing**: Handles incoming messages and responds appropriately
 - 🤖 **AI-Powered Responses**: Optional OpenAI integration for intelligent message processing
+- 🎭 **AI Reminder Messages**: Personalized Hebrew reminders with humor and sarcasm
 - 📊 **Message History**: Tracks all interactions and provides statistics
 - 🗄️ **Database Storage**: SQLite database with Railway persistent volumes
 - 🚀 **Auto-Start**: Automatically starts when deployed (no manual intervention needed)
@@ -166,14 +167,35 @@ The app supports OpenAI integration for intelligent message processing. When ena
 
 #### AI Response Examples
 
-**User**: "I took my pill just now"
-**AI**: "Excellent! You're staying on top of your health. Keep up the great work! 💪"
+**User**: "לקחתי את הגלולה"
+**AI**: "מעולה! את שומרת על עצמך. המשכי ככה! 💪"
 
-**User**: "I forgot to take it yesterday"
-**AI**: "No worries! Please take it as soon as possible. Your health is the priority. Don't beat yourself up - we all forget sometimes! 🏥"
+**User**: "שכחתי לקחת אתמול"
+**AI**: "אל דאגה! קחי אותה בהקדם האפשרי. הבריאות שלך חשובה! אל תתעצבי - כולנו שוכחות לפעמים! 🏥"
 
-**User**: "What time should I take my medicine?"
-**AI**: "Your daily reminder is set for 8:00 PM Israel time. Try to take it around that time for consistency! ⏰"
+**User**: "באיזו שעה אני צריכה לקחת?"
+**AI**: "התזכורת היומית שלך מוגדרת ל-8:00 בערב. נסי לקחת בערך באותה שעה לעקביות! ⏰"
+
+### AI Reminder Messages
+
+The app generates **personalized Hebrew reminder messages** using AI for birth control pills:
+
+- **🎭 Funny & Sarcastic**: Messages have humor and sarcasm (not formal)
+- **👩 Female-Targeted**: Specifically designed for female recipients
+- **🇮🇱 Hebrew Language**: All messages are in Hebrew
+- **😊 Emoji-Rich**: Uses appropriate emojis for engagement
+- **🔄 Daily Variety**: Different messages each day (not repetitive)
+- **💊 Birth Control Specific**: Uses Hebrew terms כדור/גלולה
+
+#### Example AI Reminders:
+- "היי יפה! 🕗 8:00 - זמן לכדור! אל תשכחי שאת לא רוצה להיות בהריון 😅💊"
+- "טאק טאק! 🚪 מי שם? הגלולה שלך! היא מחכה כבר 5 דקות... ⏰💊"
+- "היי! 🎯 זוכרת מה צריך לעשות עכשיו? כן, בדיוק - הכדור! 💊✨"
+
+#### Setup AI Reminders:
+1. **Enable OpenAI**: Set `OPENAI_ENABLED=true` and add your API key
+2. **Automatic**: AI reminders are automatically enabled when OpenAI is available
+3. **Test**: Use "Test AI Reminder" button in the web interface
 
 ## Data Storage
 

@@ -160,6 +160,7 @@
             <button class="button success" onclick="startApp()">Start/Restart App</button>
             <button class="button danger" onclick="stopApp()">Stop App</button>
             <button class="button" onclick="testReminder()">Send Test Reminder</button>
+            <button class="button" onclick="testAIReminder()">Test AI Reminder</button>
             <button class="button" onclick="refreshStatus()">Refresh Status</button>
         </div>
 
@@ -295,6 +296,22 @@
             fetch('/api/test-reminder', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => alert(data.message))
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function testAIReminder() {
+            fetch('/api/test-ai-reminder', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let message = `🤖 AI Reminder Message:\n\n"${data.message}"\n\n`;
+                        message += `AI Enabled: ${data.ai_enabled ? 'Yes' : 'No'}\n`;
+                        message += `AI Generated: ${data.is_ai_generated ? 'Yes' : 'No'}`;
+                        alert(message);
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
                 .catch(error => alert('Error: ' + error));
         }
 
