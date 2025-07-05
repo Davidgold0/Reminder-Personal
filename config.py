@@ -27,6 +27,11 @@ class Config:
     WEBHOOK_URL = os.getenv('WEBHOOK_URL', '')
     WEBHOOK_TOKEN = os.getenv('WEBHOOK_TOKEN', 'your_webhook_token_here')
     
+    # OpenAI settings
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
+    OPENAI_ENABLED = os.getenv('OPENAI_ENABLED', 'false').lower() == 'true'
+    
     @classmethod
     def validate_config(cls):
         """Validate that all required configuration is present"""
@@ -47,5 +52,9 @@ class Config:
         # Validate webhook configuration if enabled
         if cls.WEBHOOK_ENABLED and not cls.WEBHOOK_URL:
             raise ValueError("WEBHOOK_ENABLED is true but WEBHOOK_URL is not set")
+        
+        # Validate OpenAI configuration if enabled
+        if cls.OPENAI_ENABLED and not cls.OPENAI_API_KEY:
+            raise ValueError("OPENAI_ENABLED is true but OPENAI_API_KEY is not set")
         
         return True 

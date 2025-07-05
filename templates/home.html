@@ -107,6 +107,34 @@
             margin-top: 0;
             color: #333;
         }
+        .test-result {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #28a745;
+        }
+        .test-result.error {
+            background: #f8d7da;
+            border-left-color: #dc3545;
+        }
+        .test-result h4 {
+            margin-top: 0;
+            color: #333;
+        }
+        .test-result .ai-response {
+            font-size: 16px;
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 3px;
+            border-left: 3px solid #007bff;
+        }
+        .test-result .meta-info {
+            font-size: 12px;
+            color: #666;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -132,6 +160,20 @@
             <button class="button danger" onclick="stopApp()">Stop App</button>
             <button class="button" onclick="testReminder()">Send Test Reminder</button>
             <button class="button" onclick="refreshStatus()">Refresh Status</button>
+        </div>
+
+        <div class="section">
+            <h3>🤖 AI Message Testing</h3>
+            <p>Test the AI message processing by sending a message and seeing the response:</p>
+            <div class="webhook-form">
+                <input type="text" id="test-message" placeholder="Type your test message here..." style="width: 100%; padding: 8px; margin: 5px 0;">
+                <button class="button success" onclick="testAIMessage()">Send Test Message</button>
+                <button class="button" onclick="clearTestResults()">Clear Results</button>
+            </div>
+            <div id="test-results" style="margin-top: 15px;">
+                <div id="test-status" style="display: none;"></div>
+                <div id="test-response" style="display: none;"></div>
+            </div>
         </div>
 
         <div class="section">
@@ -183,7 +225,18 @@
                     <div class="stat-number">{{ message_stats.help_requests }}</div>
                     <div>Help Requests</div>
                 </div>
+                {% if message_stats.ai_enabled %}
+                <div class="stat-item">
+                    <div class="stat-number">{{ message_stats.ai_processed }}</div>
+                    <div>AI Processed</div>
+                </div>
+                {% endif %}
             </div>
+            {% if message_stats.ai_enabled %}
+            <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                🤖 AI Processing: {{ "Enabled" if message_stats.ai_enabled else "Disabled" }}
+            </p>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -319,6 +372,77 @@
 
         function refreshWebhookStatus() {
             loadWebhookStatus();
+        }
+
+        // AI Message Testing functions
+        function testAIMessage() {
+            const message = document.getElementById('test-message').value.trim();
+            if (!message) {
+                alert('Please enter a test message');
+                return;
+            }
+
+            const statusDiv = document.getElementById('test-status');
+            const responseDiv = document.getElementById('test-response');
+            
+            // Show loading status
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = '<p style="color: #007bff;">🔄 Processing message with AI...</p>';
+            responseDiv.style.display = 'none';
+
+            fetch('/api/test-ai-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                statusDiv.style.display = 'block';
+                responseDiv.style.display = 'block';
+                
+                if (data.success) {
+                    statusDiv.innerHTML = '<p style="color: #28a745;">✅ Message processed successfully!</p>';
+                    responseDiv.innerHTML = `
+                        <div class="test-result">
+                            <h4>AI Response:</h4>
+                            <p class="ai-response">"${data.response}"</p>
+                            <p class="meta-info">
+                                <strong>Processing Method:</strong> ${data.ai_processed ? '🤖 AI Processing' : '📝 Template Response'}
+                            </p>
+                            <p class="meta-info">
+                                <strong>Intent Classified:</strong> ${data.intent}
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    statusDiv.innerHTML = '<p style="color: #dc3545;">❌ Error processing message</p>';
+                    responseDiv.innerHTML = `
+                        <div class="test-result error">
+                            <h4>Error:</h4>
+                            <p>${data.error || 'Unknown error occurred'}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                statusDiv.style.display = 'block';
+                responseDiv.style.display = 'block';
+                statusDiv.innerHTML = '<p style="color: #dc3545;">❌ Network error</p>';
+                responseDiv.innerHTML = `
+                    <div class="test-result error">
+                        <h4>Network Error:</h4>
+                        <p>${error}</p>
+                    </div>
+                `;
+            });
+        }
+
+        function clearTestResults() {
+            document.getElementById('test-message').value = '';
+            document.getElementById('test-status').style.display = 'none';
+            document.getElementById('test-response').style.display = 'none';
         }
 
         // Auto-refresh every 30 seconds

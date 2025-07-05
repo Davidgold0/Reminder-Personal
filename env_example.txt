@@ -13,4 +13,12 @@ WEBHOOK_ENABLED=false
 # Your public webhook URL (e.g., https://your-domain.com)
 WEBHOOK_URL=https://your-domain.com
 # Optional security token for webhook verification
-WEBHOOK_TOKEN=your_webhook_token_here 
+WEBHOOK_TOKEN=your_webhook_token_here
+
+# OpenAI Configuration (Optional)
+# Set to 'true' to enable AI-powered message processing
+OPENAI_ENABLED=false
+# Get your API key from https://platform.openai.com/api-keys
+OPENAI_API_KEY=your_openai_api_key_here
+# OpenAI model to use (default: gpt-3.5-turbo)
+OPENAI_MODEL=gpt-3.5-turbo 
