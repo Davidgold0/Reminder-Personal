@@ -21,4 +21,11 @@ OPENAI_ENABLED=false
 # Get your API key from https://platform.openai.com/api-keys
 OPENAI_API_KEY=your_openai_api_key_here
 # OpenAI model to use (default: gpt-3.5-turbo)
-OPENAI_MODEL=gpt-3.5-turbo 
+OPENAI_MODEL=gpt-3.5-turbo
+
+# Service Configuration (Required for 2-service deployment)
+# URL of the main app service (for reminder service to connect to)
+# Example: https://your-main-app.railway.app
+MAIN_APP_URL=https://your-main-app-url.railway.app
+# Service type: 'main' for main app, 'reminder' for reminder service
+SERVICE_TYPE=main 

@@ -356,4 +356,169 @@ For local development, you can still run:
 python app.py
 ```
 
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. Network Connection Errors
+
+**Error**: `HTTPConnectionPool(host='localhost', port=5000): Max retries exceeded`
+
+**Cause**: The reminder service is trying to connect to `localhost:5000` but the main app isn't running there.
+
+**Solution**:
+1. **Check MAIN_APP_URL environment variable**:
+   ```bash
+   echo $MAIN_APP_URL
+   ```
+   It should be set to your main app's public URL (e.g., `https://your-app.railway.app`)
+
+2. **Set the correct URL**:
+   ```bash
+   export MAIN_APP_URL=https://your-main-app-url.railway.app
+   ```
+
+3. **Test the connection**:
+   ```bash
+   python test_connection.py
+   ```
+
+#### 2. Datetime Timezone Errors
+
+**Error**: `can't subtract offset-naive and offset-aware datetimes`
+
+**Cause**: The app is trying to compare datetime objects with different timezone information.
+
+**Solution**: This has been fixed in the latest version. The app now properly handles timezone-aware datetime objects.
+
+#### 3. Reminder Service Not Sending Reminders
+
+**Symptoms**: No reminders are being sent, or reminders are sent at wrong times.
+
+**Debugging Steps**:
+1. **Check Railway cron job**:
+   - Go to Railway dashboard → Your reminder service → Settings → Cron Jobs
+   - Verify the cron job is configured: `0 17 * * *` (5 PM UTC = 8 PM Israel)
+   - Test with "Run Now" button
+
+2. **Check environment variables**:
+   ```bash
+   # In Railway dashboard, verify these are set:
+   MAIN_APP_URL=https://your-main-app-url.railway.app
+   SERVICE_TYPE=reminder
+   GREEN_API_TOKEN=your_token
+   GREEN_API_INSTANCE_ID=your_instance_id
+   RECIPIENT_PHONE=your_phone_number
+   ```
+
+3. **Test reminder service manually**:
+   ```bash
+   python reminder_service.py
+   ```
+
+4. **Check logs**:
+   - Look for connection errors
+   - Verify Green API is working
+   - Check if main app is accessible
+
+#### 4. Main App Not Responding
+
+**Symptoms**: Web interface not loading, API endpoints returning errors.
+
+**Debugging Steps**:
+1. **Check if main app is running**:
+   ```bash
+   curl https://your-main-app-url.railway.app/health
+   ```
+
+2. **Check Railway deployment**:
+   - Go to Railway dashboard → Your main app service
+   - Verify deployment status is "Deployed"
+   - Check logs for startup errors
+
+3. **Test main app endpoints**:
+   ```bash
+   curl https://your-main-app-url.railway.app/api/status
+   curl https://your-main-app-url.railway.app/api/reminders/last-date
+   ```
+
+#### 5. WhatsApp Messages Not Sending
+
+**Symptoms**: Reminders are processed but not delivered via WhatsApp.
+
+**Debugging Steps**:
+1. **Check Green API credentials**:
+   - Verify `GREEN_API_TOKEN` and `GREEN_API_INSTANCE_ID` are correct
+   - Check Green API dashboard for instance status
+
+2. **Test Green API directly**:
+   ```bash
+   python test_ai.py
+   ```
+
+3. **Check recipient phone number**:
+   - Format: country code without `+` (e.g., `972501234567`)
+   - Verify the number is registered on WhatsApp
+   - Test with a different number temporarily
+
+#### 6. Database Issues
+
+**Symptoms**: Data not persisting, statistics not updating.
+
+**Debugging Steps**:
+1. **Check Railway volume**:
+   - Verify `/data` volume is mounted
+   - Check database file exists: `/data/reminder.db`
+
+2. **Test database endpoints**:
+   ```bash
+   curl https://your-main-app-url.railway.app/api/database/stats
+   ```
+
+3. **Check database permissions**:
+   - Ensure the app has write permissions to `/data` directory
+
+### Debug Tools
+
+#### Connection Test Script
+
+Use the included test script to debug connection issues:
+
+```bash
+# Set your main app URL
+export MAIN_APP_URL=https://your-main-app-url.railway.app
+
+# Run the test
+python test_connection.py
+```
+
+This will test:
+- Connection to main app endpoints
+- Timezone handling
+- Environment variable configuration
+
+#### Manual Testing
+
+Test individual components:
+
+```bash
+# Test main app
+curl -X POST https://your-main-app-url.railway.app/api/send-reminder
+
+# Test reminder service
+python reminder_service.py
+
+# Test Green API
+python test_ai.py
+```
+
+### Getting Help
+
+If you're still experiencing issues:
+
+1. **Check the logs** in Railway dashboard
+2. **Run the debug tools** mentioned above
+3. **Verify environment variables** are set correctly
+4. **Test with a simple setup** first (single service deployment)
+
 ### Available Commands

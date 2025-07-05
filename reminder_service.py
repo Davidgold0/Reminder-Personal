@@ -22,6 +22,8 @@ class ReminderService:
         if not self.main_app_url.startswith('http'):
             self.main_app_url = f"https://{self.main_app_url}"
         
+        print(f"🔗 Reminder service configured with main app URL: {self.main_app_url}")
+        
         # Initialize OpenAI if enabled
         if Config.OPENAI_ENABLED and Config.OPENAI_API_KEY:
             self.openai_enabled = True
@@ -47,6 +49,8 @@ class ReminderService:
             url = f"{self.main_app_url}{endpoint}"
             headers = {'Content-Type': 'application/json'}
             
+            print(f"🌐 Calling main app API: {method} {url}")
+            
             if method.upper() == 'GET':
                 response = requests.get(url, timeout=30)
             elif method.upper() == 'POST':
@@ -55,11 +59,21 @@ class ReminderService:
                 raise ValueError(f"Unsupported HTTP method: {method}")
             
             if response.status_code == 200:
-                return response.json()
+                result = response.json()
+                print(f"✅ API call successful: {endpoint}")
+                return result
             else:
                 print(f"❌ API call failed: {response.status_code} - {response.text}")
                 return {"error": f"HTTP {response.status_code}: {response.text}"}
                 
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ Connection error calling main app API: {e}")
+            print(f"   Main app URL: {self.main_app_url}")
+            print(f"   Endpoint: {endpoint}")
+            return {"error": f"Connection error: {str(e)}"}
+        except requests.exceptions.Timeout as e:
+            print(f"❌ Timeout error calling main app API: {e}")
+            return {"error": f"Timeout error: {str(e)}"}
         except requests.exceptions.RequestException as e:
             print(f"❌ Network error calling main app API: {e}")
             return {"error": f"Network error: {str(e)}"}
@@ -176,15 +190,21 @@ class ReminderService:
         
         if last_reminder_date:
             try:
-                last_date = datetime.fromisoformat(last_reminder_date).date()
+                # Parse the date string and ensure it's timezone-aware
+                last_datetime = datetime.fromisoformat(last_reminder_date)
+                if last_datetime.tzinfo is None:
+                    # If timezone-naive, assume it's in Israel timezone
+                    last_datetime = self.israel_tz.localize(last_datetime)
+                last_date = last_datetime.date()
                 if last_date >= today:
                     print(f"✅ Reminder already sent today ({today})")
                     return False
-            except:
+            except Exception as e:
+                print(f"⚠️ Error parsing last reminder date '{last_reminder_date}': {e}")
                 pass
         
         # Check if it's still reasonable to send (within 2 hours of scheduled time)
-        reminder_time = datetime.combine(today, time(20, 0))  # 8:00 PM
+        reminder_time = datetime.combine(today, time(20, 0)).replace(tzinfo=self.israel_tz)  # 8:00 PM
         time_diff = abs((now - reminder_time).total_seconds() / 3600)
         
         if time_diff <= 2:  # Within 2 hours
@@ -273,9 +293,26 @@ def main():
         main_app_url = os.environ.get('MAIN_APP_URL')
         if not main_app_url:
             print("❌ MAIN_APP_URL environment variable not set")
+            print("   Please set MAIN_APP_URL environment variable to your main app's URL")
+            print("   Example: https://your-main-app.railway.app")
             return
         
+        print(f"🔗 Using main app URL: {main_app_url}")
+        
         service = ReminderService(main_app_url)
+        
+        # Test connection to main app first
+        print("🔍 Testing connection to main app...")
+        status_response = service._call_main_app_api('/health')
+        if 'error' in status_response:
+            print(f"❌ Cannot connect to main app: {status_response['error']}")
+            print("   Please check:")
+            print("   1. MAIN_APP_URL is correct")
+            print("   2. Main app is running and accessible")
+            print("   3. Network connectivity")
+            return
+        
+        print("✅ Successfully connected to main app")
         
         # Check for missed reminders first
         missed_sent = service.check_missed_reminders()
@@ -292,6 +329,8 @@ def main():
             
     except Exception as e:
         print(f"❌ Error in reminder service: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main() 
