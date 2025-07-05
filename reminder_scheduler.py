@@ -4,17 +4,26 @@ import pytz
 from datetime import datetime, time as dt_time
 from green_api_client import GreenAPIClient
 from config import Config
+from database import Database
 
 class ReminderScheduler:
     def __init__(self):
         self.green_api = GreenAPIClient()
         self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        self.db = Database()
         self.last_reminder_sent = None
         
     def send_daily_reminder(self):
         """Send the daily pill reminder"""
         try:
-            print(f"Sending daily pill reminder at {datetime.now(self.israel_tz).strftime('%Y-%m-%d %H:%M:%S')}")
+            current_time = datetime.now(self.israel_tz)
+            print(f"Sending daily pill reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Save reminder to database first
+            reminder_id = self.db.save_reminder(
+                scheduled_time=current_time.isoformat(),
+                message=Config.REMINDER_MESSAGE
+            )
             
             response = self.green_api.send_message(
                 phone=Config.RECIPIENT_PHONE,
@@ -22,7 +31,9 @@ class ReminderScheduler:
             )
             
             if 'error' not in response:
-                self.last_reminder_sent = datetime.now(self.israel_tz)
+                # Mark reminder as sent in database
+                self.db.mark_reminder_sent(reminder_id)
+                self.last_reminder_sent = current_time
                 print(f"Reminder sent successfully! Response: {response}")
             else:
                 print(f"Failed to send reminder: {response['error']}")

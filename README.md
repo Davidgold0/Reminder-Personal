@@ -8,6 +8,7 @@ A Python application that sends daily pill reminders via WhatsApp using Green AP
 - 💬 **Message Processing**: Handles incoming messages and responds appropriately
 - 🤖 **AI-Powered Responses**: Optional OpenAI integration for intelligent message processing
 - 📊 **Message History**: Tracks all interactions and provides statistics
+- 🗄️ **Database Storage**: SQLite database with Railway persistent volumes
 - 🌍 **Timezone Support**: Properly handles Israel timezone
 - 🔧 **Easy Configuration**: Simple environment-based configuration
 
@@ -173,15 +174,46 @@ The app supports OpenAI integration for intelligent message processing. When ena
 **User**: "What time should I take my medicine?"
 **AI**: "Your daily reminder is set for 8:00 PM Israel time. Try to take it around that time for consistency! ⏰"
 
+## Data Storage
+
+The app uses **SQLite database** with Railway persistent volumes for reliable data storage:
+
+### Database Features
+
+- **Persistent Storage**: Data survives app restarts and deployments
+- **Automatic Cleanup**: Old messages are automatically cleaned up after 90 days
+- **Statistics**: Built-in statistics and analytics
+- **Backup Support**: Easy backup and restore functionality
+
+### Database Tables
+
+- **messages**: Stores all incoming and outgoing messages
+- **reminders**: Tracks scheduled and sent reminders
+- **statistics**: Cached statistics for performance
+
+### Database Management
+
+The app provides several API endpoints for database management:
+
+- **View statistics**: `GET /api/database/stats`
+- **Clean up old messages**: `POST /api/database/cleanup`
+
+### Migration from File Storage
+
+If you're upgrading from the previous file-based storage:
+
+```bash
+python migrate_to_db.py
+```
+
+This will migrate your existing `message_history.json` file to the database.
+
 ## Usage
 
 ### Starting the App
 
 ```bash
-python main.py
+python app.py
 ```
 
 ### Available Commands
-
-- `start` - Start the reminder app (sends daily reminders and processes messages)
-- `

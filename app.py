@@ -60,7 +60,7 @@ def initialize_app():
         message_processor = MessageProcessor()
         scheduler = ReminderScheduler()
         
-        # Load existing message history
+        # Load existing message history (migrate from file if exists)
         message_processor.load_messages_from_file()
         
         # Set up webhook if enabled
@@ -132,9 +132,9 @@ def start_message_processing():
                         # Delete the notification after processing
                         green_api.delete_notification(notification['receiptId'])
                 
-                # Save message history periodically
-                if len(message_processor.processed_messages) % 10 == 0:
-                    message_processor.save_messages_to_file()
+                # Clean up old messages periodically (every 100 messages)
+                if len(message_processor.get_message_history(1000)) % 100 == 0:
+                    message_processor.db.cleanup_old_messages(days_to_keep=90)
             
             time.sleep(5)  # Check every 5 seconds
             
@@ -220,7 +220,7 @@ def stop_app():
     try:
         app_running = False
         
-        # Save message history
+        # Save message history backup
         if message_processor:
             message_processor.save_messages_to_file()
         
@@ -432,6 +432,49 @@ def disable_webhook():
         else:
             return jsonify({"error": result['error']}), 400
             
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/database/stats')
+def database_stats():
+    """Get database statistics"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        db = message_processor.db
+        stats = db.get_statistics()
+        db_size = db.get_database_size()
+        
+        return jsonify({
+            "database_size_bytes": db_size,
+            "database_size_mb": round(db_size / (1024 * 1024), 2),
+            "statistics": stats
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/database/cleanup', methods=['POST'])
+def cleanup_database():
+    """Clean up old messages"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        data = request.get_json() or {}
+        days_to_keep = data.get('days_to_keep', 90)
+        
+        db = message_processor.db
+        db.cleanup_old_messages(days_to_keep)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Cleaned up messages older than {days_to_keep} days"
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

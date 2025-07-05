@@ -3,11 +3,12 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from openai import OpenAI
 from config import Config
+from database import Database
 import os
 
 class MessageProcessor:
     def __init__(self):
-        self.processed_messages = []
+        self.db = Database()
         self.response_templates = {
             "confirm": "Great! I've recorded that you took your pill. Stay healthy! 💪",
             "missed": "No worries! Please take it as soon as possible. Your health is important! 🏥",
@@ -157,8 +158,9 @@ Context: This is a daily pill reminder system for 8:00 PM."""
             message_record['action'] = self._classify_message_intent(message_body)
             message_record['ai_processed'] = self.openai_enabled and response != self.response_templates.get('unknown')
             
-            # Store processed message
-            self.processed_messages.append(message_record)
+            # Store processed message in database
+            message_record['response'] = response
+            self.db.save_message(message_record)
             
             return response
             
@@ -176,7 +178,7 @@ Context: This is a daily pill reminder system for 8:00 PM."""
         Returns:
             List of recent messages
         """
-        return self.processed_messages[-limit:] if self.processed_messages else []
+        return self.db.get_message_history(limit)
     
     def get_statistics(self) -> Dict:
         """
@@ -185,54 +187,34 @@ Context: This is a daily pill reminder system for 8:00 PM."""
         Returns:
             Dictionary with statistics
         """
-        if not self.processed_messages:
-            return {
-                'total_messages': 0,
-                'pill_confirmed': 0,
-                'pill_missed': 0,
-                'help_requests': 0,
-                'unknown_commands': 0,
-                'ai_processed': 0,
-                'ai_enabled': self.openai_enabled
-            }
-        
-        stats = {
-            'total_messages': len(self.processed_messages),
-            'pill_confirmed': 0,
-            'pill_missed': 0,
-            'help_requests': 0,
-            'unknown_commands': 0,
-            'ai_processed': 0,
-            'ai_enabled': self.openai_enabled
-        }
-        
-        for msg in self.processed_messages:
-            action = msg.get('action', 'unknown')
-            if action in stats:
-                stats[action] += 1
-            
-            # Count AI-processed messages
-            if msg.get('ai_processed', False):
-                stats['ai_processed'] += 1
-        
+        stats = self.db.get_statistics()
+        stats['ai_enabled'] = self.openai_enabled
         return stats
     
     def save_messages_to_file(self, filename: str = 'message_history.json'):
-        """Save processed messages to a JSON file"""
+        """Save processed messages to a JSON file (legacy method for backup)"""
         try:
+            messages = self.db.get_message_history(1000)  # Get last 1000 messages
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(self.processed_messages, f, indent=2, ensure_ascii=False)
-            print(f"Message history saved to {filename}")
+                json.dump(messages, f, indent=2, ensure_ascii=False)
+            print(f"Message history backup saved to {filename}")
         except Exception as e:
-            print(f"Error saving message history: {e}")
+            print(f"Error saving message history backup: {e}")
     
     def load_messages_from_file(self, filename: str = 'message_history.json'):
-        """Load processed messages from a JSON file"""
+        """Load processed messages from a JSON file (legacy method for migration)"""
         try:
             with open(filename, 'r', encoding='utf-8') as f:
-                self.processed_messages = json.load(f)
-            print(f"Message history loaded from {filename}")
+                messages = json.load(f)
+            
+            # Migrate old messages to database
+            for message in messages:
+                if 'response' not in message:
+                    message['response'] = ''
+                self.db.save_message(message)
+            
+            print(f"Migrated {len(messages)} messages from {filename} to database")
         except FileNotFoundError:
-            print(f"Message history file {filename} not found. Starting with empty history.")
+            print(f"Message history file {filename} not found. Starting with empty database.")
         except Exception as e:
-            print(f"Error loading message history: {e}") 
+            print(f"Error migrating message history: {e}") 
