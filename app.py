@@ -16,10 +16,8 @@ app = Flask(__name__)
 # Global variables for the app
 green_api = None
 message_processor = None
-scheduler = None
 app_running = False
 message_thread = None
-scheduler_thread = None
 
 def extract_message_content(notification):
     """Extract message content from Green API notification structure"""
@@ -59,7 +57,6 @@ def initialize_app():
             raise ValueError("WhatsApp instance is not authorized. Please check your Green API setup.")
         
         message_processor = MessageProcessor()
-        scheduler = ReminderScheduler()
         
         # Load existing message history (migrate from file if exists)
         message_processor.load_messages_from_file()
@@ -94,9 +91,7 @@ def start_background_services():
         message_thread = threading.Thread(target=start_message_processing, daemon=True)
         message_thread.start()
         
-        # Start scheduler in background thread
-        scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
-        scheduler_thread.start()
+        # Railway cron handles scheduling - no need for background scheduler
         
         print("✅ Background services started successfully")
         return True
@@ -169,20 +164,7 @@ def start_message_processing():
             print(f"❌ Error in message processing: {e}")
             time.sleep(10)
 
-def start_scheduler():
-    """Start the reminder scheduler"""
-    global scheduler
-    
-    print("⏰ Starting reminder scheduler...")
-    scheduler.setup_schedule()
-    
-    while app_running:
-        try:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
-        except Exception as e:
-            print(f"❌ Scheduler error: {e}")
-            time.sleep(60)
+# Railway cron handles scheduling - no need for background scheduler
 
 @app.route('/')
 def home():
@@ -196,13 +178,11 @@ def home():
     
     try:
         # Get status information
-        scheduler_status = scheduler.get_status() if scheduler else {}
         message_stats = message_processor.get_statistics() if message_processor else {}
         recent_messages = message_processor.get_message_history(5) if message_processor else []
         
         return render_template('home.html',
                              status="Running",
-                             scheduler_status=scheduler_status,
                              message_stats=message_stats,
                              recent_messages=recent_messages)
     except Exception as e:
@@ -241,8 +221,6 @@ def stop_app():
         # Wait for threads to finish (with timeout)
         if message_thread and message_thread.is_alive():
             message_thread.join(timeout=5)
-        if scheduler_thread and scheduler_thread.is_alive():
-            scheduler_thread.join(timeout=5)
         
         # Save message history backup
         if message_processor:
@@ -254,42 +232,101 @@ def stop_app():
 
 @app.route('/api/test-reminder', methods=['POST'])
 def test_reminder():
-    """Send a test reminder"""
-    global scheduler, app_running
-    
-    if not app_running:
-        return jsonify({"success": False, "message": "App is not running"})
-    
-    try:
-        scheduler.send_test_reminder()
-        return jsonify({"success": True, "message": "Test reminder sent"})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Error sending test reminder: {e}"})
+    """Send a test reminder (legacy endpoint - use /api/send-reminder instead)"""
+    return send_reminder()
 
 @app.route('/api/test-ai-reminder', methods=['POST'])
 def test_ai_reminder():
     """Test AI reminder message generation"""
-    global scheduler, app_running
+    global app_running
     
     if not app_running:
         return jsonify({"success": False, "error": "App is not running"})
     
-    if not scheduler:
-        return jsonify({"success": False, "error": "Scheduler not initialized"})
-    
     try:
+        # Import and use the reminder service
+        from reminder_service import ReminderService
+        service = ReminderService()
+        
         # Generate AI message without sending
-        ai_message = scheduler.generate_ai_reminder_message()
+        ai_message = service.generate_ai_reminder_message()
         
         return jsonify({
             "success": True,
             "message": ai_message,
-            "ai_enabled": scheduler.openai_enabled,
+            "ai_enabled": service.openai_enabled,
             "is_ai_generated": ai_message != Config.REMINDER_MESSAGE
         })
     except Exception as e:
         print(f"❌ Error testing AI reminder: {e}")
         return jsonify({"success": False, "error": f"Error generating AI reminder: {str(e)}"})
+
+@app.route('/api/send-reminder', methods=['POST'])
+def send_reminder():
+    """Send daily reminder (called by Railway cron or manual test)"""
+    global green_api, message_processor, app_running
+    
+    if not app_running:
+        return jsonify({"success": False, "error": "App is not running"})
+    
+    try:
+        # Import and use the reminder service
+        from reminder_service import ReminderService
+        service = ReminderService()
+        
+        # Check for missed reminders first
+        missed_sent = service.check_missed_reminders()
+        
+        # If no missed reminder was sent, send today's reminder
+        if not missed_sent:
+            success = service.send_reminder()
+            if success:
+                return jsonify({
+                    "success": True,
+                    "message": "Daily reminder sent successfully",
+                    "type": "daily"
+                })
+            else:
+                return jsonify({"success": False, "error": "Failed to send daily reminder"})
+        else:
+            return jsonify({
+                "success": True,
+                "message": "Missed reminder sent successfully",
+                "type": "missed"
+            })
+            
+    except Exception as e:
+        print(f"❌ Error sending reminder: {e}")
+        return jsonify({"success": False, "error": f"Error sending reminder: {str(e)}"})
+
+@app.route('/api/check-missed-reminders', methods=['POST'])
+def check_missed_reminders():
+    """Manually check for missed reminders"""
+    global app_running
+    
+    if not app_running:
+        return jsonify({"success": False, "error": "App is not running"})
+    
+    try:
+        from reminder_service import ReminderService
+        service = ReminderService()
+        
+        # Get missed reminders info
+        missed_info = service.get_missed_reminders_info()
+        
+        # Try to send missed reminder
+        missed_sent = service.check_missed_reminders()
+        
+        return jsonify({
+            "success": True,
+            "missed_sent": missed_sent,
+            "missed_info": missed_info,
+            "message": "Missed reminders checked"
+        })
+        
+    except Exception as e:
+        print(f"❌ Error checking missed reminders: {e}")
+        return jsonify({"success": False, "error": f"Error checking missed reminders: {str(e)}"})
 
 @app.route('/api/test-ai-message', methods=['POST'])
 def test_ai_message():
@@ -352,12 +389,10 @@ def api_status():
         })
     
     try:
-        scheduler_status = scheduler.get_status() if scheduler else {}
         message_stats = message_processor.get_statistics() if message_processor else {}
         
         return jsonify({
             "running": True,
-            "scheduler": scheduler_status,
             "messages": message_stats
         })
     except Exception as e:

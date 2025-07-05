@@ -159,8 +159,9 @@
             <p><em>The app starts automatically when deployed. Use these controls to restart or stop the app manually.</em></p>
             <button class="button success" onclick="startApp()">Start/Restart App</button>
             <button class="button danger" onclick="stopApp()">Stop App</button>
-            <button class="button" onclick="testReminder()">Send Test Reminder</button>
+            <button class="button" onclick="sendReminder()">Send Reminder Now</button>
             <button class="button" onclick="testAIReminder()">Test AI Reminder</button>
+            <button class="button" onclick="checkMissedReminders()">Check Missed Reminders</button>
             <button class="button" onclick="refreshStatus()">Refresh Status</button>
         </div>
 
@@ -196,16 +197,14 @@
             </div>
         </div>
 
-        {% if scheduler_status %}
         <div class="section">
-            <h3>Reminder Schedule</h3>
-            <p><strong>Next Reminder:</strong> {{ scheduler_status.next_reminder or 'Not scheduled' }}</p>
-            <p><strong>Last Reminder:</strong> {{ scheduler_status.last_reminder_sent or 'None' }}</p>
-            <p><strong>Timezone:</strong> {{ scheduler_status.timezone }}</p>
-            <p><strong>Recipient:</strong> {{ scheduler_status.recipient }}</p>
-            <p><strong>Message:</strong> {{ scheduler_status.message }}</p>
+            <h3>⏰ Reminder Schedule</h3>
+            <p><strong>Next Reminder:</strong> Daily at 8:00 PM Israel time (5:00 PM UTC)</p>
+            <p><strong>Timezone:</strong> Asia/Jerusalem</p>
+            <p><strong>Recipient:</strong> {{ config.RECIPIENT_PHONE if config else 'Not configured' }}</p>
+            <p><strong>Method:</strong> Railway Cron Job</p>
+            <p><em>Reminders are automatically sent via Railway's cron system. Use the buttons above to test or check for missed reminders.</em></p>
         </div>
-        {% endif %}
 
         {% if message_stats %}
         <div class="section">
@@ -292,10 +291,36 @@
                 .catch(error => alert('Error: ' + error));
         }
 
-        function testReminder() {
-            fetch('/api/test-reminder', { method: 'POST' })
+        function sendReminder() {
+            fetch('/api/send-reminder', { method: 'POST' })
                 .then(response => response.json())
-                .then(data => alert(data.message))
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}\nType: ${data.type}`);
+                    } else {
+                        alert('❌ Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function checkMissedReminders() {
+            fetch('/api/check-missed-reminders', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        let message = `📊 Missed Reminders Check:\n\n`;
+                        message += `Missed Reminder Sent: ${data.missed_sent ? 'Yes' : 'No'}\n`;
+                        message += `Total Missed: ${data.missed_info.total_missed}\n`;
+                        message += `Last Sent: ${data.missed_info.last_sent || 'Never'}\n`;
+                        if (data.missed_info.missed_dates.length > 0) {
+                            message += `Missed Dates: ${data.missed_info.missed_dates.join(', ')}`;
+                        }
+                        alert(message);
+                    } else {
+                        alert('❌ Error: ' + (data.error || 'Unknown error'));
+                    }
+                })
                 .catch(error => alert('Error: ' + error));
         }
 

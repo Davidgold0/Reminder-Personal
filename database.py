@@ -58,6 +58,8 @@ class Database:
                     message TEXT NOT NULL,
                     sent BOOLEAN DEFAULT FALSE,
                     sent_at TEXT,
+                    is_missed_reminder BOOLEAN DEFAULT FALSE,
+                    scheduled_date TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
@@ -219,6 +221,70 @@ class Database:
                 WHERE sent = 0 
                 ORDER BY scheduled_time ASC
             ''')
+            
+            reminders = []
+            for row in cursor.fetchall():
+                reminders.append(dict(row))
+            
+            return reminders
+    
+    def get_last_reminder_date(self) -> Optional[str]:
+        """
+        Get the date of the last sent reminder
+        
+        Returns:
+            Date string of last reminder or None
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT scheduled_date FROM reminders 
+                WHERE sent = 1 
+                ORDER BY sent_at DESC 
+                LIMIT 1
+            ''')
+            
+            result = cursor.fetchone()
+            return result['scheduled_date'] if result else None
+    
+    def save_scheduled_reminder(self, scheduled_time: datetime, message: str = None):
+        """
+        Save a scheduled reminder for future reference
+        
+        Args:
+            scheduled_time: When the reminder should be sent
+            message: Optional message (will be generated if None)
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO reminders (scheduled_time, message, scheduled_date)
+                VALUES (?, ?, ?)
+            ''', (
+                scheduled_time.isoformat(),
+                message or "AI-generated reminder",
+                scheduled_time.date().isoformat()
+            ))
+            conn.commit()
+    
+    def get_missed_reminders(self, days_back: int = 7) -> List[Dict]:
+        """
+        Get reminders that were missed in the last N days
+        
+        Args:
+            days_back: Number of days to look back
+            
+        Returns:
+            List of missed reminder dictionaries
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM reminders 
+                WHERE sent = 0 
+                AND scheduled_date >= date('now', '-{} days')
+                ORDER BY scheduled_time DESC
+            '''.format(days_back))
             
             reminders = []
             for row in cursor.fetchall():

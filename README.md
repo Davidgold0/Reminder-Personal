@@ -197,6 +197,31 @@ The app generates **personalized Hebrew reminder messages** using AI for birth c
 2. **Automatic**: AI reminders are automatically enabled when OpenAI is available
 3. **Test**: Use "Test AI Reminder" button in the web interface
 
+## Railway Cron Scheduling
+
+The app uses **Railway's built-in cron jobs** for reliable reminder scheduling:
+
+### How It Works
+
+- **Automatic Scheduling**: Railway runs the reminder service daily at 8:00 PM Israel time (5:00 PM UTC)
+- **Missed Reminder Handling**: Automatically detects and sends missed reminders if the service was down
+- **Resource Efficient**: No background scheduler running 24/7
+- **Reliable**: Railway's infrastructure handles timing and execution
+
+### Cron Configuration
+
+```json
+{
+  "cron": "0 17 * * *"  // Daily at 5:00 PM UTC (8:00 PM Israel time)
+}
+```
+
+### Manual Testing
+
+- **Send Reminder Now**: Test the reminder system immediately
+- **Check Missed Reminders**: Check for and send any missed reminders
+- **Test AI Reminder**: Test AI message generation without sending
+
 ## Data Storage
 
 The app uses **SQLite database** with Railway persistent volumes for reliable data storage:
@@ -238,7 +263,7 @@ This will migrate your existing `message_history.json` file to the database.
 The app **automatically starts** when deployed to Railway or when the module is loaded. No manual intervention is required!
 
 - ✅ **Message processing** starts automatically
-- ✅ **Reminder scheduler** starts automatically  
+- ✅ **Railway cron jobs** handle reminder scheduling automatically
 - ✅ **Database** is initialized automatically
 - ✅ **Webhooks** are configured automatically (if enabled)
 
@@ -248,7 +273,9 @@ You can still manually control the app through the web interface:
 
 - **Start/Restart**: Manually start or restart the app
 - **Stop**: Stop the app temporarily
-- **Test Reminder**: Send a test reminder immediately
+- **Send Reminder Now**: Send a reminder immediately
+- **Check Missed Reminders**: Check and send any missed reminders
+- **Test AI Reminder**: Test AI message generation
 - **Database Management**: View stats and cleanup old messages
 
 ### Local Development
