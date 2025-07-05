@@ -9,6 +9,7 @@ A Python application that sends daily pill reminders via WhatsApp using Green AP
 - 🤖 **AI-Powered Responses**: Optional OpenAI integration for intelligent message processing
 - 📊 **Message History**: Tracks all interactions and provides statistics
 - 🗄️ **Database Storage**: SQLite database with Railway persistent volumes
+- 🚀 **Auto-Start**: Automatically starts when deployed (no manual intervention needed)
 - 🌍 **Timezone Support**: Properly handles Israel timezone
 - 🔧 **Easy Configuration**: Simple environment-based configuration
 
@@ -210,7 +211,27 @@ This will migrate your existing `message_history.json` file to the database.
 
 ## Usage
 
-### Starting the App
+### Automatic Startup
+
+The app **automatically starts** when deployed to Railway or when the module is loaded. No manual intervention is required!
+
+- ✅ **Message processing** starts automatically
+- ✅ **Reminder scheduler** starts automatically  
+- ✅ **Database** is initialized automatically
+- ✅ **Webhooks** are configured automatically (if enabled)
+
+### Manual Control
+
+You can still manually control the app through the web interface:
+
+- **Start/Restart**: Manually start or restart the app
+- **Stop**: Stop the app temporarily
+- **Test Reminder**: Send a test reminder immediately
+- **Database Management**: View stats and cleanup old messages
+
+### Local Development
+
+For local development, you can still run:
 
 ```bash
 python app.py

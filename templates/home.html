@@ -156,7 +156,8 @@
 
         <div class="section">
             <h3>Controls</h3>
-            <button class="button success" onclick="startApp()">Start App</button>
+            <p><em>The app starts automatically when deployed. Use these controls to restart or stop the app manually.</em></p>
+            <button class="button success" onclick="startApp()">Start/Restart App</button>
             <button class="button danger" onclick="stopApp()">Stop App</button>
             <button class="button" onclick="testReminder()">Send Test Reminder</button>
             <button class="button" onclick="refreshStatus()">Refresh Status</button>
@@ -239,6 +240,15 @@
             {% endif %}
         </div>
         {% endif %}
+
+        <div class="section">
+            <h3>🗄️ Database Information</h3>
+            <div id="database-stats">
+                <p>Loading database statistics...</p>
+            </div>
+            <button class="button" onclick="loadDatabaseStats()">Refresh Database Stats</button>
+            <button class="button" onclick="cleanupDatabase()">Cleanup Old Messages</button>
+        </div>
 
         {% if recent_messages %}
         <div class="section">
@@ -445,12 +455,74 @@
             document.getElementById('test-response').style.display = 'none';
         }
 
+        // Database management functions
+        function loadDatabaseStats() {
+            fetch('/api/database/stats')
+                .then(response => response.json())
+                .then(data => {
+                    const statsDiv = document.getElementById('database-stats');
+                    
+                    if (data.error) {
+                        statsDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        let statsHtml = '<div class="stats">';
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${data.database_size_mb}</div>
+                            <div>Database Size (MB)</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${data.statistics.total_messages}</div>
+                            <div>Total Messages</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${data.statistics.pill_confirmed}</div>
+                            <div>Pill Confirmed</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${data.statistics.pill_missed}</div>
+                            <div>Pill Missed</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${data.statistics.ai_processed}</div>
+                            <div>AI Processed</div>
+                        </div>`;
+                        statsHtml += '</div>';
+                        
+                        statsDiv.innerHTML = statsHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('database-stats').innerHTML = `<p class="error">Error loading database stats: ${error}</p>`;
+                });
+        }
+
+        function cleanupDatabase() {
+            if (!confirm('This will delete messages older than 90 days. Continue?')) {
+                return;
+            }
+
+            fetch('/api/database/cleanup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ days_to_keep: 90 })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error || 'Database cleanup completed');
+                loadDatabaseStats();
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
         // Auto-refresh every 30 seconds
         setInterval(refreshStatus, 30000);
 
-        // Load webhook status on page load
+        // Load webhook status and database stats on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadWebhookStatus();
+            loadDatabaseStats();
         });
     </script>
 </body>

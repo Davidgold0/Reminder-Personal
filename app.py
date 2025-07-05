@@ -19,6 +19,7 @@ message_processor = None
 scheduler = None
 app_running = False
 message_thread = None
+scheduler_thread = None
 
 def extract_message_content(notification):
     """Extract message content from Green API notification structure"""
@@ -76,6 +77,32 @@ def initialize_app():
         return True
     except Exception as e:
         print(f"❌ Failed to initialize app: {e}")
+        return False
+
+def start_background_services():
+    """Start message processing and scheduler in background threads"""
+    global app_running, message_thread, scheduler_thread
+    
+    if app_running:
+        print("⚠️ App is already running")
+        return False
+    
+    try:
+        app_running = True
+        
+        # Start message processing in background thread
+        message_thread = threading.Thread(target=start_message_processing, daemon=True)
+        message_thread.start()
+        
+        # Start scheduler in background thread
+        scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
+        scheduler_thread.start()
+        
+        print("✅ Background services started successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Error starting background services: {e}")
+        app_running = False
         return False
 
 def start_message_processing():
@@ -186,8 +213,6 @@ def home():
 @app.route('/api/start', methods=['POST'])
 def start_app():
     """Start the reminder app"""
-    global app_running, message_thread, scheduler
-    
     if app_running:
         return jsonify({"success": False, "message": "App is already running"})
     
@@ -195,15 +220,8 @@ def start_app():
         if not initialize_app():
             return jsonify({"success": False, "message": "Failed to initialize app"})
         
-        app_running = True
-        
-        # Start message processing in background thread
-        message_thread = threading.Thread(target=start_message_processing, daemon=True)
-        message_thread.start()
-        
-        # Start scheduler in background thread
-        scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
-        scheduler_thread.start()
+        if not start_background_services():
+            return jsonify({"success": False, "message": "Failed to start background services"})
         
         return jsonify({"success": True, "message": "App started successfully"})
     except Exception as e:
@@ -219,6 +237,12 @@ def stop_app():
     
     try:
         app_running = False
+        
+        # Wait for threads to finish (with timeout)
+        if message_thread and message_thread.is_alive():
+            message_thread.join(timeout=5)
+        if scheduler_thread and scheduler_thread.is_alive():
+            scheduler_thread.join(timeout=5)
         
         # Save message history backup
         if message_processor:
@@ -480,4 +504,31 @@ def cleanup_database():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False) 
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+# Auto-start the app when the module is loaded (for production deployment)
+def auto_start_app():
+    """Automatically start the app when the module is loaded"""
+    import time
+    
+    print("🚀 Auto-starting reminder app...")
+    
+    # Wait a moment for the web server to start
+    time.sleep(2)
+    
+    try:
+        if initialize_app():
+            if start_background_services():
+                print("✅ App auto-started successfully!")
+            else:
+                print("❌ Failed to start background services")
+        else:
+            print("❌ Failed to initialize app")
+    except Exception as e:
+        print(f"❌ Error during auto-start: {e}")
+
+# Start the app automatically when deployed
+if os.environ.get('AUTO_START', 'true').lower() == 'true':
+    # Use a separate thread to avoid blocking the web server startup
+    auto_start_thread = threading.Thread(target=auto_start_app, daemon=True)
+    auto_start_thread.start() 
