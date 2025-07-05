@@ -92,6 +92,21 @@
             border-radius: 5px;
             margin: 10px 0;
         }
+        .webhook-form {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .webhook-form input {
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .webhook-form h4 {
+            margin-top: 0;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -117,6 +132,24 @@
             <button class="button danger" onclick="stopApp()">Stop App</button>
             <button class="button" onclick="testReminder()">Send Test Reminder</button>
             <button class="button" onclick="refreshStatus()">Refresh Status</button>
+        </div>
+
+        <div class="section">
+            <h3>Webhook Management</h3>
+            <div id="webhook-status">
+                <p>Loading webhook status...</p>
+            </div>
+            <div id="webhook-controls" style="display: none;">
+                <button class="button" onclick="setupWebhook()">Setup Webhook</button>
+                <button class="button danger" onclick="disableWebhook()">Disable Webhook</button>
+                <button class="button" onclick="refreshWebhookStatus()">Refresh Webhook Status</button>
+            </div>
+            <div id="webhook-setup-form" class="webhook-form" style="display: none;">
+                <h4>Setup Webhook URL</h4>
+                <input type="text" id="webhook-url" placeholder="https://your-domain.com/webhook" style="width: 100%; padding: 8px; margin: 5px 0;">
+                <button class="button success" onclick="submitWebhookSetup()">Set Webhook</button>
+                <button class="button" onclick="cancelWebhookSetup()">Cancel</button>
+            </div>
         </div>
 
         {% if scheduler_status %}
@@ -206,8 +239,95 @@
             location.reload();
         }
 
+        // Webhook management functions
+        function loadWebhookStatus() {
+            fetch('/api/webhook/status')
+                .then(response => response.json())
+                .then(data => {
+                    const statusDiv = document.getElementById('webhook-status');
+                    const controlsDiv = document.getElementById('webhook-controls');
+                    
+                    if (data.error) {
+                        statusDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                        controlsDiv.style.display = 'none';
+                    } else {
+                        let statusHtml = '<p><strong>Webhook Status:</strong></p>';
+                        statusHtml += `<p>Enabled: ${data.webhook_enabled ? 'Yes' : 'No'}</p>`;
+                        if (data.webhook_url) {
+                            statusHtml += `<p>URL: ${data.webhook_url}</p>`;
+                        }
+                        if (data.current_settings) {
+                            statusHtml += `<p>Current Settings: ${JSON.stringify(data.current_settings)}</p>`;
+                        }
+                        
+                        statusDiv.innerHTML = statusHtml;
+                        controlsDiv.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('webhook-status').innerHTML = `<p class="error">Error loading webhook status: ${error}</p>`;
+                });
+        }
+
+        function setupWebhook() {
+            document.getElementById('webhook-setup-form').style.display = 'block';
+            document.getElementById('webhook-controls').style.display = 'none';
+        }
+
+        function cancelWebhookSetup() {
+            document.getElementById('webhook-setup-form').style.display = 'none';
+            document.getElementById('webhook-controls').style.display = 'block';
+            document.getElementById('webhook-url').value = '';
+        }
+
+        function submitWebhookSetup() {
+            const webhookUrl = document.getElementById('webhook-url').value.trim();
+            if (!webhookUrl) {
+                alert('Please enter a webhook URL');
+                return;
+            }
+
+            fetch('/api/webhook/setup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ webhook_url: webhookUrl })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error || 'Webhook setup completed');
+                cancelWebhookSetup();
+                loadWebhookStatus();
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function disableWebhook() {
+            if (!confirm('Are you sure you want to disable the webhook?')) {
+                return;
+            }
+
+            fetch('/api/webhook/disable', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message || data.error || 'Webhook disabled');
+                    loadWebhookStatus();
+                })
+                .catch(error => alert('Error: ' + error));
+        }
+
+        function refreshWebhookStatus() {
+            loadWebhookStatus();
+        }
+
         // Auto-refresh every 30 seconds
         setInterval(refreshStatus, 30000);
+
+        // Load webhook status on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadWebhookStatus();
+        });
     </script>
 </body>
 </html> 
