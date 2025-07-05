@@ -1,5 +1,6 @@
 import os
 import sys
+import requests
 from datetime import datetime, time, timedelta
 import pytz
 from typing import Optional
@@ -9,14 +10,17 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config import Config
 from green_api_client import GreenAPIClient
-from database import Database
 from openai import OpenAI
 
 class ReminderService:
-    def __init__(self):
+    def __init__(self, main_app_url: str = None):
         self.green_api = GreenAPIClient()
-        self.db = Database()
         self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        
+        # Main app URL for API calls
+        self.main_app_url = main_app_url or os.environ.get('MAIN_APP_URL', 'http://localhost:5000')
+        if not self.main_app_url.startswith('http'):
+            self.main_app_url = f"https://{self.main_app_url}"
         
         # Initialize OpenAI if enabled
         if Config.OPENAI_ENABLED and Config.OPENAI_API_KEY:
@@ -26,6 +30,79 @@ class ReminderService:
         else:
             self.openai_enabled = False
             print("🤖 AI reminder messages disabled - using default message")
+    
+    def _call_main_app_api(self, endpoint: str, method: str = 'GET', data: dict = None) -> dict:
+        """
+        Make HTTP call to main app API
+        
+        Args:
+            endpoint: API endpoint (e.g., '/api/status')
+            method: HTTP method (GET, POST, etc.)
+            data: Data to send (for POST requests)
+            
+        Returns:
+            Response data as dictionary
+        """
+        try:
+            url = f"{self.main_app_url}{endpoint}"
+            headers = {'Content-Type': 'application/json'}
+            
+            if method.upper() == 'GET':
+                response = requests.get(url, timeout=30)
+            elif method.upper() == 'POST':
+                response = requests.post(url, json=data, headers=headers, timeout=30)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"❌ API call failed: {response.status_code} - {response.text}")
+                return {"error": f"HTTP {response.status_code}: {response.text}"}
+                
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Network error calling main app API: {e}")
+            return {"error": f"Network error: {str(e)}"}
+        except Exception as e:
+            print(f"❌ Error calling main app API: {e}")
+            return {"error": f"API error: {str(e)}"}
+    
+    def get_last_reminder_date(self) -> Optional[str]:
+        """Get the last reminder date from main app database"""
+        try:
+            # Call main app to get last reminder date
+            response = self._call_main_app_api('/api/reminders/last-date')
+            if 'error' not in response:
+                return response.get('last_reminder_date')
+            return None
+        except Exception as e:
+            print(f"❌ Error getting last reminder date: {e}")
+            return None
+    
+    def save_reminder_to_main_app(self, scheduled_time: str, message: str) -> Optional[int]:
+        """Save reminder to main app database"""
+        try:
+            data = {
+                'scheduled_time': scheduled_time,
+                'message': message
+            }
+            response = self._call_main_app_api('/api/reminders/save', method='POST', data=data)
+            if 'error' not in response:
+                return response.get('reminder_id')
+            return None
+        except Exception as e:
+            print(f"❌ Error saving reminder to main app: {e}")
+            return None
+    
+    def mark_reminder_sent_in_main_app(self, reminder_id: int) -> bool:
+        """Mark reminder as sent in main app database"""
+        try:
+            data = {'reminder_id': reminder_id}
+            response = self._call_main_app_api('/api/reminders/mark-sent', method='POST', data=data)
+            return 'error' not in response
+        except Exception as e:
+            print(f"❌ Error marking reminder as sent: {e}")
+            return False
     
     def generate_ai_reminder_message(self) -> str:
         """
@@ -94,14 +171,17 @@ class ReminderService:
         now = datetime.now(self.israel_tz)
         today = now.date()
         
-        # Check if we sent a reminder today
-        last_reminder_date = self.db.get_last_reminder_date()
+        # Check if we sent a reminder today by calling main app
+        last_reminder_date = self.get_last_reminder_date()
         
         if last_reminder_date:
-            last_date = datetime.fromisoformat(last_reminder_date).date()
-            if last_date >= today:
-                print(f"✅ Reminder already sent today ({today})")
-                return False
+            try:
+                last_date = datetime.fromisoformat(last_reminder_date).date()
+                if last_date >= today:
+                    print(f"✅ Reminder already sent today ({today})")
+                    return False
+            except:
+                pass
         
         # Check if it's still reasonable to send (within 2 hours of scheduled time)
         reminder_time = datetime.combine(today, time(20, 0))  # 8:00 PM
@@ -131,11 +211,15 @@ class ReminderService:
             # Generate AI message
             reminder_message = self.generate_ai_reminder_message()
             
-            # Save reminder to database first
-            reminder_id = self.db.save_reminder(
+            # Save reminder to main app database first
+            reminder_id = self.save_reminder_to_main_app(
                 scheduled_time=current_time.isoformat(),
                 message=reminder_message
             )
+            
+            if not reminder_id:
+                print("❌ Failed to save reminder to main app database")
+                return False
             
             # Send via WhatsApp
             response = self.green_api.send_message(
@@ -144,13 +228,13 @@ class ReminderService:
             )
             
             if 'error' not in response:
-                # Mark reminder as sent in database
-                self.db.mark_reminder_sent(reminder_id)
-                print(f"✅ Reminder sent successfully! Response: {response}")
-                
-                # Schedule next reminder
-                self.schedule_next_reminder()
-                return True
+                # Mark reminder as sent in main app database
+                if self.mark_reminder_sent_in_main_app(reminder_id):
+                    print(f"✅ Reminder sent successfully! Response: {response}")
+                    return True
+                else:
+                    print("⚠️ Reminder sent but failed to mark as sent in database")
+                    return True  # Still consider it successful
             else:
                 print(f"❌ Failed to send reminder: {response['error']}")
                 return False
@@ -159,18 +243,9 @@ class ReminderService:
             print(f"❌ Error sending reminder: {e}")
             return False
     
-    def schedule_next_reminder(self):
-        """Schedule the next reminder for tomorrow"""
-        tomorrow = datetime.now(self.israel_tz).date() + timedelta(days=1)
-        next_reminder_time = datetime.combine(tomorrow, time(20, 0))
-        
-        # Save to database for tracking
-        self.db.save_scheduled_reminder(next_reminder_time)
-        print(f"📅 Next reminder scheduled for {next_reminder_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
     def get_missed_reminders_info(self, days_back: int = 7) -> dict:
         """
-        Get information about missed reminders
+        Get information about missed reminders from main app
         
         Args:
             days_back: Number of days to look back
@@ -178,33 +253,45 @@ class ReminderService:
         Returns:
             Dictionary with missed reminders information
         """
-        missed_reminders = self.db.get_missed_reminders(days_back)
-        
-        return {
-            "total_missed": len(missed_reminders),
-            "missed_dates": [r['scheduled_date'] for r in missed_reminders],
-            "last_sent": self.db.get_last_reminder_date()
-        }
+        try:
+            data = {'days_back': days_back}
+            response = self._call_main_app_api('/api/reminders/missed-info', method='POST', data=data)
+            if 'error' not in response:
+                return response
+            else:
+                return {"error": response['error']}
+        except Exception as e:
+            print(f"❌ Error getting missed reminders info: {e}")
+            return {"error": str(e)}
 
 def main():
     """Main function called by Railway cron job"""
     print("🚀 Starting reminder service...")
     
     try:
-        service = ReminderService()
+        # Get main app URL from environment
+        main_app_url = os.environ.get('MAIN_APP_URL')
+        if not main_app_url:
+            print("❌ MAIN_APP_URL environment variable not set")
+            return
+        
+        service = ReminderService(main_app_url)
         
         # Check for missed reminders first
         missed_sent = service.check_missed_reminders()
         
         # If no missed reminder was sent, send today's reminder
         if not missed_sent:
-            service.send_reminder()
-        
-        print("✅ Reminder service completed successfully")
-        
+            success = service.send_reminder()
+            if success:
+                print("✅ Daily reminder sent successfully")
+            else:
+                print("❌ Failed to send daily reminder")
+        else:
+            print("✅ Missed reminder sent successfully")
+            
     except Exception as e:
         print(f"❌ Error in reminder service: {e}")
-        sys.exit(1)
 
 if __name__ == "__main__":
     main() 

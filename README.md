@@ -197,7 +197,77 @@ The app generates **personalized Hebrew reminder messages** using AI for birth c
 2. **Automatic**: AI reminders are automatically enabled when OpenAI is available
 3. **Test**: Use "Test AI Reminder" button in the web interface
 
-## Railway Cron Scheduling
+## Railway Deployment Options
+
+The app supports two deployment approaches on Railway:
+
+### Option 1: Single Service with Railway Cron (Recommended)
+
+**Advantages:**
+- ✅ Simple setup
+- ✅ Shared database
+- ✅ Lower cost
+- ✅ Railway-managed scheduling
+
+**Setup:**
+1. Deploy your app to Railway using `railway.json`
+2. In Railway dashboard → Settings → Cron Jobs
+3. Add: Schedule `0 17 * * *` (5 PM UTC = 8 PM Israel)
+4. Command: `curl -X POST https://your-app-url.railway.app/api/send-reminder`
+
+### Option 2: Two Services with Shared Database (Advanced)
+
+**Advantages:**
+- ✅ Service separation
+- ✅ Independent scaling
+- ✅ Better resource isolation
+- ✅ Shared database via HTTP API
+
+**Setup:**
+1. **Deploy Main App Service:**
+   - Use `railway.json` configuration (default)
+   - This handles web interface and message processing
+   - Contains the shared database
+
+2. **Deploy Reminder Service:**
+   - Use same `railway.json` but with `SERVICE_TYPE=reminder` environment variable
+   - This tells Railway to run `reminder_service.py` instead of the main app
+   - Communicates with main app via HTTP API
+
+3. **Configure Environment Variables:**
+   - In the reminder service, set `SERVICE_TYPE=reminder` and `MAIN_APP_URL=https://your-main-app-url.railway.app`
+   - Copy all other environment variables to both services
+
+4. **Set up Railway Cron for Reminder Service:**
+   - Schedule: `0 17 * * *` (5 PM UTC = 8 PM Israel)
+   - Command: `python reminder_service.py`
+
+### Testing the Setup
+
+1. **Test main app endpoints:**
+   ```bash
+   curl -X POST https://your-main-app-url.railway.app/api/send-reminder
+   curl https://your-main-app-url.railway.app/cron-test
+   ```
+
+2. **Test reminder service API calls:**
+   ```bash
+   curl https://your-main-app-url.railway.app/api/reminders/last-date
+   ```
+
+### Service Comparison
+
+| Feature | Single Service | Two Services |
+|---------|----------------|--------------|
+| **Database** | Shared | Shared via API |
+| **Complexity** | Simple | More complex |
+| **Resource Usage** | Lower | Higher |
+| **Scalability** | Limited | Better |
+| **Cost** | Lower | Higher |
+| **Reliability** | High | High |
+| **Maintenance** | Easy | Moderate |
+
+**Recommendation**: Start with single service, upgrade to two services if needed for scaling.
 
 The app uses **Railway's built-in cron jobs** for reliable reminder scheduling:
 

@@ -266,8 +266,14 @@ def send_reminder():
     """Send daily reminder (called by Railway cron or manual test)"""
     global green_api, message_processor, app_running
     
+    # Allow this endpoint to work even if app isn't fully running
+    # (for Railway cron calls)
     if not app_running:
-        return jsonify({"success": False, "error": "App is not running"})
+        # Try to initialize if not running
+        if not initialize_app():
+            return jsonify({"success": False, "error": "Failed to initialize app"})
+        if not start_background_services():
+            return jsonify({"success": False, "error": "Failed to start background services"})
     
     try:
         # Import and use the reminder service
@@ -405,6 +411,15 @@ def api_status():
 def health_check():
     """Health check endpoint for Railway"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+
+@app.route('/cron-test')
+def cron_test():
+    """Simple endpoint for Railway cron to test connectivity"""
+    return jsonify({
+        "status": "cron_test_ok", 
+        "timestamp": datetime.now().isoformat(),
+        "message": "Cron can reach this endpoint"
+    })
 
 @app.route('/webhook', methods=['POST'])
 def webhook_handler():
@@ -558,6 +573,100 @@ def cleanup_database():
         return jsonify({
             "success": True, 
             "message": f"Cleaned up messages older than {days_to_keep} days"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Reminder Service API Endpoints
+@app.route('/api/reminders/save', methods=['POST'])
+def save_reminder():
+    """Save a reminder to database (called by reminder service)"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        scheduled_time = data.get('scheduled_time')
+        message = data.get('message')
+        
+        if not scheduled_time or not message:
+            return jsonify({"error": "scheduled_time and message are required"}), 400
+        
+        # Save to database
+        reminder_id = message_processor.db.save_reminder(scheduled_time, message)
+        
+        return jsonify({
+            "success": True,
+            "reminder_id": reminder_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/reminders/mark-sent', methods=['POST'])
+def mark_reminder_sent():
+    """Mark a reminder as sent (called by reminder service)"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        reminder_id = data.get('reminder_id')
+        if not reminder_id:
+            return jsonify({"error": "reminder_id is required"}), 400
+        
+        # Mark as sent in database
+        message_processor.db.mark_reminder_sent(reminder_id)
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/reminders/missed-info', methods=['POST'])
+def get_missed_reminders_info():
+    """Get missed reminders information (called by reminder service)"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        data = request.get_json() or {}
+        days_back = data.get('days_back', 7)
+        
+        # Get missed reminders from database
+        missed_reminders = message_processor.db.get_missed_reminders(days_back)
+        last_reminder_date = message_processor.db.get_last_reminder_date()
+        
+        return jsonify({
+            "total_missed": len(missed_reminders),
+            "missed_dates": [r['scheduled_date'] for r in missed_reminders if r.get('scheduled_date')],
+            "last_sent": last_reminder_date
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/reminders/last-date')
+def get_last_reminder_date():
+    """Get the last reminder date (called by reminder service)"""
+    global message_processor
+    
+    if not message_processor:
+        return jsonify({"error": "Message processor not initialized"}), 400
+    
+    try:
+        last_reminder_date = message_processor.db.get_last_reminder_date()
+        return jsonify({
+            "last_reminder_date": last_reminder_date
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
