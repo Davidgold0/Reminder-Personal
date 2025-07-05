@@ -39,7 +39,6 @@ A Python application that sends daily pill reminders via WhatsApp using Green AP
 
 4. **Edit `.env` file**:
    ```
-   GREEN_API_ID=your_green_api_id_here
    GREEN_API_TOKEN=your_green_api_token_here
    GREEN_API_INSTANCE_ID=your_instance_id_here
    RECIPIENT_PHONE=972501234567
@@ -59,6 +58,71 @@ A Python application that sends daily pill reminders via WhatsApp using Green AP
 - Use country code without the `+` symbol
 - Example: `972501234567` for an Israeli number
 - Make sure the number is registered on WhatsApp
+
+### Webhook Setup (Optional but Recommended)
+
+Webhooks provide real-time notifications instead of polling the API every 5 seconds. This is more efficient and provides faster response times.
+
+#### Option 1: Using a Public Domain
+
+1. **Deploy your app to a public server** (Railway, Heroku, DigitalOcean, etc.)
+2. **Set environment variables**:
+   ```
+   WEBHOOK_ENABLED=true
+   WEBHOOK_URL=https://your-domain.com
+   WEBHOOK_TOKEN=your_secret_token_here
+   ```
+3. **The app will automatically set up the webhook** when it starts
+
+#### Option 2: Using ngrok for Local Development
+
+1. **Install ngrok**: Download from [ngrok.com](https://ngrok.com/)
+2. **Start your Flask app**:
+   ```bash
+   python app.py
+   ```
+3. **Start ngrok** in a new terminal:
+   ```bash
+   ngrok http 5000
+   ```
+4. **Copy the ngrok URL** (e.g., `https://abc123.ngrok.io`)
+5. **Set environment variables**:
+   ```
+   WEBHOOK_ENABLED=true
+   WEBHOOK_URL=https://abc123.ngrok.io
+   WEBHOOK_TOKEN=your_secret_token_here
+   ```
+6. **Restart your app**
+
+#### Webhook Management
+
+The app provides several endpoints for managing webhooks:
+
+- **Check webhook status**: `GET /api/webhook/status`
+- **Set up webhook**: `POST /api/webhook/setup`
+- **Disable webhook**: `POST /api/webhook/disable`
+
+#### Testing Webhooks
+
+Use the included test script to verify your webhook is working:
+
+```bash
+python test_webhook.py https://your-domain.com/webhook
+```
+
+This will send test notifications to your webhook endpoint.
+
+#### Webhook vs Polling
+
+| Feature | Webhooks | Polling |
+|---------|----------|---------|
+| **Response Time** | Real-time | Up to 5 seconds |
+| **Efficiency** | High | Lower |
+| **Setup** | Requires public URL | Simple |
+| **Reliability** | Depends on network | More reliable |
+| **Cost** | Lower API usage | Higher API usage |
+
+**Recommendation**: Use webhooks for production deployments, polling for development/testing.
 
 ## Usage
 

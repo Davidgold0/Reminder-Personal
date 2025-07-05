@@ -27,11 +27,25 @@ def initialize_app():
     try:
         Config.validate_config()
         green_api = GreenAPIClient()
+        
+        # Check if WhatsApp instance is authorized
+        if not green_api.is_instance_authorized():
+            raise ValueError("WhatsApp instance is not authorized. Please check your Green API setup.")
+        
         message_processor = MessageProcessor()
         scheduler = ReminderScheduler()
         
         # Load existing message history
         message_processor.load_messages_from_file()
+        
+        # Set up webhook if enabled
+        if Config.WEBHOOK_ENABLED:
+            webhook_url = f"{Config.WEBHOOK_URL}/webhook"
+            result = green_api.set_webhook_url(webhook_url)
+            if 'error' not in result:
+                print(f"✅ Webhook set successfully: {webhook_url}")
+            else:
+                print(f"⚠️ Warning: Failed to set webhook: {result['error']}")
         
         print("✅ App initialized successfully")
         return True
@@ -45,29 +59,39 @@ def start_message_processing():
     
     print("🔄 Starting message processing...")
     
+    # If webhooks are enabled, we don't need polling
+    if Config.WEBHOOK_ENABLED:
+        print("📡 Webhooks enabled - using real-time notifications")
+        while app_running:
+            time.sleep(10)  # Just keep the thread alive
+        return
+    
+    print("🔄 Using polling mode for message processing")
     while app_running:
         try:
-            # Get notifications from Green API
-            notifications = green_api.get_notifications()
-            
-            for notification in notifications:
-                if notification.get('receiptId'):
-                    # Process the notification
-                    if 'body' in notification:
-                        response = message_processor.process_message(notification)
+            # Check if there are notifications available first
+            if green_api.check_notifications_available():
+                # Get notifications from Green API using correct endpoint
+                notifications = green_api.get_notifications()
+                
+                for notification in notifications:
+                    if notification.get('receiptId'):
+                        # Process the notification
+                        if 'body' in notification:
+                            response = message_processor.process_message(notification)
+                            
+                            if response:
+                                # Send response back
+                                sender = notification.get('senderData', {}).get('chatId', '').split('@')[0]
+                                green_api.send_message(sender, response)
+                                print(f"📨 Processed message from {sender}: {notification['body']}")
                         
-                        if response:
-                            # Send response back
-                            sender = notification.get('senderData', {}).get('chatId', '').split('@')[0]
-                            green_api.send_message(sender, response)
-                            print(f"📨 Processed message from {sender}: {notification['body']}")
-                    
-                    # Delete the notification
-                    green_api.delete_notification(notification['receiptId'])
-            
-            # Save message history periodically
-            if len(message_processor.processed_messages) % 10 == 0:
-                message_processor.save_messages_to_file()
+                        # Delete the notification after processing
+                        green_api.delete_notification(notification['receiptId'])
+                
+                # Save message history periodically
+                if len(message_processor.processed_messages) % 10 == 0:
+                    message_processor.save_messages_to_file()
             
             time.sleep(5)  # Check every 5 seconds
             
@@ -205,6 +229,101 @@ def api_status():
 def health_check():
     """Health check endpoint for Railway"""
     return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+
+@app.route('/webhook', methods=['POST'])
+def webhook_handler():
+    """Handle incoming webhook notifications from Green API"""
+    global message_processor, green_api
+    
+    try:
+        # Get the notification data
+        notification = request.get_json()
+        
+        if not notification:
+            return jsonify({"error": "No data received"}), 400
+        
+        print(f"📨 Received webhook notification: {notification}")
+        
+        # Process the notification
+        if notification.get('receiptId') and 'body' in notification:
+            response = message_processor.process_message(notification)
+            
+            if response:
+                # Send response back
+                sender = notification.get('senderData', {}).get('chatId', '').split('@')[0]
+                green_api.send_message(sender, response)
+                print(f"📨 Processed webhook message from {sender}: {notification['body']}")
+            
+            # Delete the notification
+            green_api.delete_notification(notification['receiptId'])
+        
+        return jsonify({"success": True}), 200
+        
+    except Exception as e:
+        print(f"❌ Error processing webhook: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webhook/status')
+def webhook_status():
+    """Get webhook configuration status"""
+    global green_api
+    
+    if not green_api:
+        return jsonify({"error": "Green API client not initialized"}), 400
+    
+    try:
+        settings = green_api.get_webhook_settings()
+        return jsonify({
+            "webhook_enabled": Config.WEBHOOK_ENABLED,
+            "webhook_url": Config.WEBHOOK_URL,
+            "current_settings": settings
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webhook/setup', methods=['POST'])
+def setup_webhook():
+    """Set up webhook URL"""
+    global green_api
+    
+    if not green_api:
+        return jsonify({"error": "Green API client not initialized"}), 400
+    
+    try:
+        data = request.get_json()
+        webhook_url = data.get('webhook_url')
+        
+        if not webhook_url:
+            return jsonify({"error": "webhook_url is required"}), 400
+        
+        result = green_api.set_webhook_url(webhook_url)
+        
+        if 'error' not in result:
+            return jsonify({"success": True, "message": "Webhook set successfully"})
+        else:
+            return jsonify({"error": result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webhook/disable', methods=['POST'])
+def disable_webhook():
+    """Disable webhook"""
+    global green_api
+    
+    if not green_api:
+        return jsonify({"error": "Green API client not initialized"}), 400
+    
+    try:
+        result = green_api.delete_webhook_url()
+        
+        if 'error' not in result:
+            return jsonify({"success": True, "message": "Webhook disabled successfully"})
+        else:
+            return jsonify({"error": result['error']}), 400
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
