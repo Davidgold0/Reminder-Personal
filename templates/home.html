@@ -199,11 +199,11 @@
 
         <div class="section">
             <h3>⏰ Reminder Schedule</h3>
-            <p><strong>Next Reminder:</strong> Daily at 8:00 PM Israel time (5:00 PM UTC)</p>
+            <p><strong>Reminder Times:</strong> <span id="reminder-times">Loading...</span></p>
             <p><strong>Timezone:</strong> Asia/Jerusalem</p>
-            <p><strong>Recipient:</strong> {{ config.RECIPIENT_PHONE if config else 'Not configured' }}</p>
+            <p><strong>Active Recipients:</strong> <span id="active-recipients">Loading...</span></p>
             <p><strong>Method:</strong> Railway Cron Job</p>
-            <p><em>Reminders are automatically sent via Railway's cron system. Use the buttons above to test or check for missed reminders.</em></p>
+            <p><em>Reminders are automatically sent to customers at their scheduled times via Railway's cron system. Use the buttons above to test or check for missed reminders.</em></p>
         </div>
 
         {% if message_stats %}
@@ -240,6 +240,50 @@
             {% endif %}
         </div>
         {% endif %}
+
+        <div class="section">
+            <h3>👥 Customer Management</h3>
+            <p><em>Manage recipient phone numbers for pill reminders</em></p>
+            <div class="webhook-form">
+                <h4>Add New Customer</h4>
+                <input type="text" id="customer-phone" placeholder="Phone number (e.g., 972501234567)" style="width: 100%; padding: 8px; margin: 5px 0;">
+                <input type="text" id="customer-name" placeholder="Customer name (optional)" style="width: 100%; padding: 8px; margin: 5px 0;">
+                <input type="time" id="customer-reminder-time" value="20:00" style="width: 100%; padding: 8px; margin: 5px 0;">
+                <small style="color: #666; display: block; margin-bottom: 10px;">Reminder time (24-hour format)</small>
+                <button class="button success" onclick="addCustomer()">Add Customer</button>
+            </div>
+            <div id="customers-list">
+                <p>Loading customers...</p>
+            </div>
+            <button class="button" onclick="loadCustomers()">Refresh Customers</button>
+        </div>
+
+        <div class="section">
+            <h3>✅ Confirmation Tracking</h3>
+            <p><em>Track pill confirmations and pending responses</em></p>
+            <div id="confirmation-stats">
+                <p>Loading confirmation statistics...</p>
+            </div>
+            <div id="pending-confirmations">
+                <p>Loading pending confirmations...</p>
+            </div>
+            <button class="button" onclick="loadConfirmationStats()">Refresh Confirmation Stats</button>
+            <button class="button" onclick="loadPendingConfirmations()">Refresh Pending Confirmations</button>
+        </div>
+
+        <div class="section">
+            <h3>🚨 Escalation Tracking</h3>
+            <p><em>Track escalating reminders and escalation statistics</em></p>
+            <div id="escalation-stats">
+                <p>Loading escalation statistics...</p>
+            </div>
+            <div id="pending-escalations">
+                <p>Loading pending escalations...</p>
+            </div>
+            <button class="button" onclick="loadEscalationStats()">Refresh Escalation Stats</button>
+            <button class="button" onclick="loadPendingEscalations()">Refresh Pending Escalations</button>
+            <button class="button" onclick="testEscalationMessage()">Test Escalation Message</button>
+        </div>
 
         <div class="section">
             <h3>🗄️ Database Information</h3>
@@ -558,6 +602,324 @@
             .catch(error => alert('Error: ' + error));
         }
 
+        // Customer management functions
+        function loadCustomers() {
+            fetch('/api/customers')
+                .then(response => response.json())
+                .then(data => {
+                    const customersDiv = document.getElementById('customers-list');
+                    
+                    if (data.error) {
+                        customersDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        let customersHtml = '<h4>Current Customers</h4>';
+                        
+                        if (data.customers.length === 0) {
+                            customersHtml += '<p>No customers found. Add your first customer above.</p>';
+                        } else {
+                            customersHtml += '<div style="max-height: 200px; overflow-y: auto;">';
+                            data.customers.forEach(customer => {
+                                const status = customer.is_active ? '✅ Active' : '❌ Inactive';
+                                customersHtml += `
+                                    <div class="message-item">
+                                        <strong>${customer.name || 'Unnamed'}</strong><br>
+                                        Phone: ${customer.phone_number}<br>
+                                        Reminder Time: ${customer.reminder_time || '20:00'}<br>
+                                        Status: ${status}<br>
+                                        Added: ${customer.created_at}
+                                        <button class="button danger" style="margin-left: 10px; padding: 2px 8px; font-size: 12px;" onclick="deleteCustomer(${customer.id})">Delete</button>
+                                    </div>
+                                `;
+                            });
+                            customersHtml += '</div>';
+                        }
+                        
+                        customersDiv.innerHTML = customersHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('customers-list').innerHTML = `<p class="error">Error loading customers: ${error}</p>`;
+                });
+        }
+
+        function loadActiveRecipients() {
+            fetch('/api/customers/active-phones')
+                .then(response => response.json())
+                .then(data => {
+                    const recipientsSpan = document.getElementById('active-recipients');
+                    
+                    if (data.error) {
+                        recipientsSpan.innerHTML = `<span class="error">Error: ${data.error}</span>`;
+                    } else {
+                        if (data.phone_numbers.length === 0) {
+                            recipientsSpan.innerHTML = 'No active recipients';
+                        } else {
+                            recipientsSpan.innerHTML = data.phone_numbers.join(', ');
+                        }
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('active-recipients').innerHTML = `<span class="error">Error loading recipients: ${error}</span>`;
+                });
+        }
+
+        function loadReminderTimes() {
+            fetch('/api/customers/reminder-times')
+                .then(response => response.json())
+                .then(data => {
+                    const timesSpan = document.getElementById('reminder-times');
+                    
+                    if (data.error) {
+                        timesSpan.innerHTML = `<span class="error">Error: ${data.error}</span>`;
+                    } else {
+                        if (data.reminder_times.length === 0) {
+                            timesSpan.innerHTML = 'No reminder times configured';
+                        } else {
+                            timesSpan.innerHTML = data.reminder_times.join(', ');
+                        }
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('reminder-times').innerHTML = `<span class="error">Error loading reminder times: ${error}</span>`;
+                });
+        }
+
+        function loadConfirmationStats() {
+            fetch('/api/confirmations/stats')
+                .then(response => response.json())
+                .then(data => {
+                    const statsDiv = document.getElementById('confirmation-stats');
+                    
+                    if (data.error) {
+                        statsDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        const stats = data.stats;
+                        let statsHtml = '<h4>Confirmation Statistics (Last 30 Days)</h4>';
+                        statsHtml += '<div class="stats">';
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${stats.total}</div>
+                            <div>Total Reminders</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${stats.confirmed}</div>
+                            <div>Confirmed</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${stats.pending}</div>
+                            <div>Pending</div>
+                        </div>`;
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${stats.confirmation_rate.toFixed(1)}%</div>
+                            <div>Confirmation Rate</div>
+                        </div>`;
+                        statsHtml += '</div>';
+                        
+                        statsDiv.innerHTML = statsHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('confirmation-stats').innerHTML = `<p class="error">Error loading confirmation stats: ${error}</p>`;
+                });
+        }
+
+        function loadPendingConfirmations() {
+            fetch('/api/confirmations/pending')
+                .then(response => response.json())
+                .then(data => {
+                    const pendingDiv = document.getElementById('pending-confirmations');
+                    
+                    if (data.error) {
+                        pendingDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        let pendingHtml = '<h4>Pending Confirmations</h4>';
+                        
+                        if (data.pending_confirmations.length === 0) {
+                            pendingHtml += '<p>No pending confirmations found.</p>';
+                        } else {
+                            pendingHtml += '<div style="max-height: 200px; overflow-y: auto;">';
+                            data.pending_confirmations.forEach(reminder => {
+                                const status = reminder.confirmed ? '✅ Confirmed' : '⏳ Pending';
+                                pendingHtml += `
+                                    <div class="message-item">
+                                        <strong>${reminder.customer_name || 'Unnamed'}</strong><br>
+                                        Phone: ${reminder.phone_number}<br>
+                                        Date: ${reminder.reminder_date}<br>
+                                        Time: ${reminder.reminder_time}<br>
+                                        Status: ${status}
+                                    </div>
+                                `;
+                            });
+                            pendingHtml += '</div>';
+                        }
+                        
+                        pendingDiv.innerHTML = pendingHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('pending-confirmations').innerHTML = `<p class="error">Error loading pending confirmations: ${error}</p>`;
+                });
+        }
+
+        function loadEscalationStats() {
+            fetch('/api/escalation/stats')
+                .then(response => response.json())
+                .then(data => {
+                    const statsDiv = document.getElementById('escalation-stats');
+                    
+                    if (data.error) {
+                        statsDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        const stats = data.stats;
+                        let statsHtml = '<h4>Escalation Statistics (Last 30 Days)</h4>';
+                        statsHtml += '<div class="stats">';
+                        statsHtml += `<div class="stat-item">
+                            <div class="stat-number">${stats.total_escalations}</div>
+                            <div>Total Escalations</div>
+                        </div>`;
+                        
+                        // Show escalations by level
+                        for (let level = 1; level <= 4; level++) {
+                            const count = stats.escalation_by_level[level] || 0;
+                            statsHtml += `<div class="stat-item">
+                                <div class="stat-number">${count}</div>
+                                <div>Level ${level} Escalations</div>
+                            </div>`;
+                        }
+                        
+                        statsHtml += '</div>';
+                        
+                        statsDiv.innerHTML = statsHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('escalation-stats').innerHTML = `<p class="error">Error loading escalation stats: ${error}</p>`;
+                });
+        }
+
+        function loadPendingEscalations() {
+            fetch('/api/escalation/pending')
+                .then(response => response.json())
+                .then(data => {
+                    const pendingDiv = document.getElementById('pending-escalations');
+                    
+                    if (data.error) {
+                        pendingDiv.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+                    } else {
+                        let pendingHtml = '<h4>Pending Escalations</h4>';
+                        
+                        if (data.pending_escalations.length === 0) {
+                            pendingHtml += '<p>No pending escalations found.</p>';
+                        } else {
+                            pendingHtml += '<div style="max-height: 200px; overflow-y: auto;">';
+                            data.pending_escalations.forEach(reminder => {
+                                const escalationLevel = reminder.escalation_level || 0;
+                                const nextTime = reminder.next_escalation_time || 'Unknown';
+                                pendingHtml += `
+                                    <div class="message-item">
+                                        <strong>${reminder.customer_name || 'Unnamed'}</strong><br>
+                                        Phone: ${reminder.phone_number}<br>
+                                        Date: ${reminder.reminder_date}<br>
+                                        Current Level: ${escalationLevel}<br>
+                                        Next Escalation: ${nextTime}
+                                    </div>
+                                `;
+                            });
+                            pendingHtml += '</div>';
+                        }
+                        
+                        pendingDiv.innerHTML = pendingHtml;
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('pending-escalations').innerHTML = `<p class="error">Error loading pending escalations: ${error}</p>`;
+                });
+        }
+
+        function testEscalationMessage() {
+            const level = prompt('Enter escalation level (1-4):', '1');
+            if (!level || level < 1 || level > 4) {
+                alert('Please enter a valid escalation level (1-4)');
+                return;
+            }
+            
+            const customerName = prompt('Enter customer name (optional):', '');
+            
+            fetch(`/api/escalation/test/${level}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    customer_name: customerName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Escalation Level ${data.escalation_level}:\n\n"${data.message}"\n\nAI Enabled: ${data.ai_enabled ? 'Yes' : 'No'}`);
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function addCustomer() {
+            const phone = document.getElementById('customer-phone').value.trim();
+            const name = document.getElementById('customer-name').value.trim();
+            const reminderTime = document.getElementById('customer-reminder-time').value;
+            
+            if (!phone) {
+                alert('Please enter a phone number');
+                return;
+            }
+            
+            fetch('/api/customers', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    phone_number: phone,
+                    name: name,
+                    reminder_time: reminderTime
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Customer added successfully!');
+                    document.getElementById('customer-phone').value = '';
+                    document.getElementById('customer-name').value = '';
+                    document.getElementById('customer-reminder-time').value = '20:00';
+                    loadCustomers();
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
+        function deleteCustomer(customerId) {
+            if (!confirm('Are you sure you want to delete this customer?')) {
+                return;
+            }
+            
+            fetch(`/api/customers/${customerId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✅ Customer deleted successfully!');
+                    loadCustomers();
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => alert('Error: ' + error));
+        }
+
         // Auto-refresh every 30 seconds
         setInterval(refreshStatus, 30000);
 
@@ -565,6 +927,13 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadWebhookStatus();
             loadDatabaseStats();
+            loadCustomers();
+            loadActiveRecipients();
+            loadReminderTimes();
+            loadConfirmationStats();
+            loadPendingConfirmations();
+            loadEscalationStats();
+            loadPendingEscalations();
         });
     </script>
 </body>

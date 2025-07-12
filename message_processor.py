@@ -4,11 +4,13 @@ from typing import Dict, List, Optional
 from openai import OpenAI
 from config import Config
 from database import Database
+from confirmation_ai import ConfirmationAI
 import os
 
 class MessageProcessor:
     def __init__(self):
         self.db = Database()
+        self.confirmation_ai = ConfirmationAI()
         self.response_templates = {
             "confirm": "מעולה! רשמתי שלקחת את הגלולה. תישארי בריאה! 💪",
             "missed": "אל דאגה! קחי אותה בהקדם האפשרי. הבריאות שלך חשובה! 🏥",
@@ -112,6 +114,60 @@ class MessageProcessor:
         
         return 'unknown_command'
     
+    def _process_confirmation(self, message_body: str, sender: str) -> Optional[str]:
+        """
+        Process a message as a potential confirmation of taking the pill
+        
+        Args:
+            message_body: The user's message
+            sender: The sender's phone number
+            
+        Returns:
+            Response message if this was a confirmation, None otherwise
+        """
+        try:
+            # Get customer by phone number
+            customer = self.db.get_customer_by_phone(sender)
+            if not customer:
+                print(f"📱 No customer found for phone number: {sender}")
+                return None
+            
+            # Check if there's a pending daily reminder for today
+            today = datetime.now().date().isoformat()
+            daily_reminder = self.db.get_daily_reminder(customer['id'], today)
+            
+            if not daily_reminder:
+                print(f"📱 No pending reminder found for {sender} on {today}")
+                return None
+            
+            if daily_reminder['confirmed']:
+                print(f"📱 Reminder already confirmed for {sender} on {today}")
+                return None
+            
+            # Use AI to analyze the confirmation
+            confirmed, response_message = self.confirmation_ai.analyze_confirmation(message_body, sender)
+            
+            # Update the daily reminder with confirmation status
+            self.db.update_daily_reminder_confirmation(
+                customer_id=customer['id'],
+                reminder_date=today,
+                confirmed=confirmed,
+                confirmation_message=message_body
+            )
+            
+            # Stop escalations if user confirmed
+            if confirmed:
+                self.db.stop_escalations_for_customer(customer['id'], today)
+                print(f"✅ Confirmation recorded for {sender} on {today} - escalations stopped")
+            else:
+                print(f"❌ Missed pill recorded for {sender} on {today}")
+            
+            return response_message
+            
+        except Exception as e:
+            print(f"❌ Error processing confirmation: {e}")
+            return None
+    
     def process_message(self, message_data: Dict) -> Optional[str]:
         """
         Process incoming message and return appropriate response
@@ -139,27 +195,34 @@ class MessageProcessor:
                 'processed': True
             }
             
-            # Try AI processing first if enabled
-            response = None
-            if self.openai_enabled:
-                response = self._get_ai_response(message_body, sender)
-            
-            # Fallback to template-based processing if AI fails or is disabled
-            if not response:
-                message_lower = message_body.lower().strip()
+            # Check if this is a confirmation message
+            confirmation_result = self._process_confirmation(message_body, sender)
+            if confirmation_result:
+                response = confirmation_result
+                message_record['action'] = 'confirmation_processed'
+            else:
+                # Try AI processing first if enabled
+                response = None
+                if self.openai_enabled:
+                    response = self._get_ai_response(message_body, sender)
                 
-                # Check Hebrew and English patterns
-                if message_lower in ['taken', 'yes', 'done', 'ok', '✅', 'לקחתי', 'כן', 'סיימתי', 'אוקיי']:
-                    response = self.response_templates['confirm']
-                elif message_lower in ['missed', 'no', 'forgot', '❌', 'החמצתי', 'לא', 'שכחתי']:
-                    response = self.response_templates['missed']
-                elif message_lower in ['help', 'commands', '?', 'what', 'עזרה', 'פקודות', 'מה']:
-                    response = self.response_templates['help']
-                else:
-                    response = self.response_templates['unknown']
+                # Fallback to template-based processing if AI fails or is disabled
+                if not response:
+                    message_lower = message_body.lower().strip()
+                    
+                    # Check Hebrew and English patterns
+                    if message_lower in ['taken', 'yes', 'done', 'ok', '✅', 'לקחתי', 'כן', 'סיימתי', 'אוקיי']:
+                        response = self.response_templates['confirm']
+                    elif message_lower in ['missed', 'no', 'forgot', '❌', 'החמצתי', 'לא', 'שכחתי']:
+                        response = self.response_templates['missed']
+                    elif message_lower in ['help', 'commands', '?', 'what', 'עזרה', 'פקודות', 'מה']:
+                        response = self.response_templates['help']
+                    else:
+                        response = self.response_templates['unknown']
+                
+                # Classify the message intent for statistics
+                message_record['action'] = self._classify_message_intent(message_body)
             
-            # Classify the message intent for statistics
-            message_record['action'] = self._classify_message_intent(message_body)
             message_record['ai_processed'] = self.openai_enabled and response != self.response_templates.get('unknown')
             
             # Store processed message in database

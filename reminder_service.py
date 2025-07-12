@@ -92,6 +92,38 @@ class ReminderService:
         except Exception as e:
             print(f"❌ Error triggering reminder: {e}")
             return False
+    
+    def check_escalations(self) -> bool:
+        """
+        Check for reminders that need escalation and send them
+        
+        Returns:
+            True if the API call was successful, False otherwise
+        """
+        try:
+            current_time = datetime.now(self.israel_tz)
+            print(f"🚨 Checking escalations at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Call the main app to handle escalation logic
+            response = self._call_main_app_api('/api/escalation/check', method='POST')
+            
+            if 'error' not in response:
+                escalations_sent = response.get('escalations_sent', 0)
+                failed_escalations = response.get('failed_escalations', 0)
+                total_checked = response.get('total_checked', 0)
+                
+                print(f"✅ Escalation check completed!")
+                print(f"   Escalations sent: {escalations_sent}")
+                print(f"   Failed escalations: {failed_escalations}")
+                print(f"   Total checked: {total_checked}")
+                return True
+            else:
+                print(f"❌ Failed to check escalations: {response['error']}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error checking escalations: {e}")
+            return False
 
 def main():
     """Main function called by Railway cron job"""
@@ -129,6 +161,14 @@ def main():
             print("✅ Reminder triggered successfully")
         else:
             print("❌ Failed to trigger reminder")
+        
+        # Check for escalations
+        print("🚨 Checking for escalations...")
+        escalation_success = service.check_escalations()
+        if escalation_success:
+            print("✅ Escalation check completed")
+        else:
+            print("❌ Failed to check escalations")
             
     except Exception as e:
         print(f"❌ Error in reminder service: {e}")

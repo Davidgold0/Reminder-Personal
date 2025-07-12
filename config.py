@@ -37,8 +37,7 @@ class Config:
         """Validate that all required configuration is present"""
         required_vars = [
             'GREEN_API_TOKEN', 
-            'GREEN_API_INSTANCE_ID',
-            'RECIPIENT_PHONE'
+            'GREEN_API_INSTANCE_ID'
         ]
         
         missing_vars = []
