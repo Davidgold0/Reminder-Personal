@@ -727,8 +727,8 @@ class Database:
                 FROM daily_reminders dr
                 JOIN customers c ON dr.customer_id = c.id
                 WHERE dr.confirmed = 0 
-                AND STR_TO_DATE(dr.reminder_date, '%Y-%m-%d') < CURDATE()
-                AND (dr.next_escalation_time IS NULL OR STR_TO_DATE(dr.next_escalation_time, '%Y-%m-%d %H:%i:%s') <= NOW())
+                AND dr.next_escalation_time IS NOT NULL
+                AND STR_TO_DATE(dr.next_escalation_time, '%Y-%m-%d %H:%i:%s') <= NOW()
                 ORDER BY dr.reminder_date ASC
             ''')
             
