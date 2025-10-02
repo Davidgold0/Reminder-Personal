@@ -23,6 +23,21 @@ OPENAI_API_KEY=your_openai_api_key_here
 # OpenAI model to use (default: gpt-3.5-turbo)
 OPENAI_MODEL=gpt-3.5-turbo
 
+# Database Configuration for Railway MySQL
+# Railway will automatically provide DATABASE_URL when you add MySQL service
+# Format: mysql://user:password@host:port/database
+DATABASE_URL=mysql://user:password@host:port/database
+
+# Alternative MySQL settings (if not using DATABASE_URL)
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=reminder_db
+MYSQL_USER=reminder_user
+MYSQL_PASSWORD=your_mysql_password
+
+# Database type (set to true for MySQL, false for SQLite fallback)
+USE_MYSQL=true
+
 # Service Configuration (Required for 2-service deployment)
 # URL of the main app service (for reminder service to connect to)
 # Example: https://your-main-app.railway.app

@@ -32,6 +32,15 @@ class Config:
     OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-3.5-turbo')
     OPENAI_ENABLED = os.getenv('OPENAI_ENABLED', 'false').lower() == 'true'
     
+    # Database settings - Railway MySQL
+    DATABASE_URL = os.getenv('DATABASE_URL')  # Railway provides this automatically
+    MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
+    MYSQL_PORT = int(os.getenv('MYSQL_PORT', 3306))
+    MYSQL_DATABASE = os.getenv('MYSQL_DATABASE')
+    MYSQL_USER = os.getenv('MYSQL_USER')
+    MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD')
+    USE_MYSQL = os.getenv('USE_MYSQL', 'true').lower() == 'true'
+    
     @classmethod
     def validate_config(cls):
         """Validate that all required configuration is present"""
