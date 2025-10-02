@@ -1,35 +1,61 @@
-import sqlite3
+import mysql.connector
+from mysql.connector import Error
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import os
 from contextlib import contextmanager
+from config import Config
+import urllib.parse
 
 class Database:
-    def __init__(self, db_path: str = '/data/reminder.db'):
+    def __init__(self):
         """
-        Initialize database connection
-        
-        Args:
-            db_path: Path to SQLite database file
+        Initialize MySQL database connection for Railway deployment
         """
-        self.db_path = db_path
-        self._ensure_data_directory()
+        self.connection_params = self._get_connection_params()
         self._create_tables()
     
-    def _ensure_data_directory(self):
-        """Ensure the data directory exists"""
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+    def _get_connection_params(self):
+        """Get MySQL connection parameters from Railway or individual config"""
+        if Config.DATABASE_URL:
+            # Parse DATABASE_URL (Railway format: mysql://user:password@host:port/database)
+            url = urllib.parse.urlparse(Config.DATABASE_URL)
+            return {
+                'host': url.hostname,
+                'port': url.port or 3306,
+                'database': url.path[1:],  # Remove leading '/'
+                'user': url.username,
+                'password': url.password,
+                'ssl_disabled': False,
+                'autocommit': False
+            }
+        else:
+            # Use individual config parameters
+            return {
+                'host': Config.MYSQL_HOST,
+                'port': Config.MYSQL_PORT,
+                'database': Config.MYSQL_DATABASE,
+                'user': Config.MYSQL_USER,
+                'password': Config.MYSQL_PASSWORD,
+                'ssl_disabled': False,
+                'autocommit': False
+            }
     
     @contextmanager
     def get_connection(self):
         """Context manager for database connections"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # Enable dict-like access
+        conn = None
         try:
+            conn = mysql.connector.connect(**self.connection_params)
             yield conn
+        except Error as e:
+            if conn:
+                conn.rollback()
+            raise e
         finally:
-            conn.close()
+            if conn and conn.is_connected():
+                conn.close()
     
     def _create_tables(self):
         """Create database tables if they don't exist"""
@@ -39,77 +65,77 @@ class Database:
             # Messages table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sender TEXT NOT NULL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sender VARCHAR(255) NOT NULL,
                     message TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    action TEXT,
-                    ai_processed BOOLEAN DEFAULT FALSE,
+                    timestamp VARCHAR(255) NOT NULL,
+                    action VARCHAR(255),
+                    ai_processed TINYINT(1) DEFAULT 0,
                     response TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
             # Reminders table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS reminders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    scheduled_time TEXT NOT NULL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    scheduled_time VARCHAR(255) NOT NULL,
                     message TEXT NOT NULL,
-                    sent BOOLEAN DEFAULT FALSE,
-                    sent_at TEXT,
-                    is_missed_reminder BOOLEAN DEFAULT FALSE,
-                    scheduled_date TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    sent TINYINT(1) DEFAULT 0,
+                    sent_at VARCHAR(255),
+                    is_missed_reminder TINYINT(1) DEFAULT 0,
+                    scheduled_date VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             
             # Statistics table for caching
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS statistics (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT NOT NULL,
-                    total_messages INTEGER DEFAULT 0,
-                    pill_confirmed INTEGER DEFAULT 0,
-                    pill_missed INTEGER DEFAULT 0,
-                    help_requests INTEGER DEFAULT 0,
-                    unknown_commands INTEGER DEFAULT 0,
-                    ai_processed INTEGER DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(date)
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    date VARCHAR(255) NOT NULL,
+                    total_messages INT DEFAULT 0,
+                    pill_confirmed INT DEFAULT 0,
+                    pill_missed INT DEFAULT 0,
+                    help_requests INT DEFAULT 0,
+                    unknown_commands INT DEFAULT 0,
+                    ai_processed INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_date (date)
                 )
             ''')
             
             # Customers table for managing recipient phone numbers
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS customers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    phone_number TEXT NOT NULL UNIQUE,
-                    name TEXT,
-                    reminder_time TEXT DEFAULT '20:00',
-                    is_active BOOLEAN DEFAULT TRUE,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    phone_number VARCHAR(255) NOT NULL UNIQUE,
+                    name VARCHAR(255),
+                    reminder_time VARCHAR(255) DEFAULT '20:00',
+                    is_active TINYINT(1) DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 )
             ''')
             
             # Daily reminders tracking table
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS daily_reminders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    customer_id INTEGER NOT NULL,
-                    reminder_date TEXT NOT NULL,
-                    reminder_time TEXT NOT NULL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    customer_id INT NOT NULL,
+                    reminder_date VARCHAR(255) NOT NULL,
+                    reminder_time VARCHAR(255) NOT NULL,
                     message_sent TEXT NOT NULL,
-                    confirmed BOOLEAN DEFAULT FALSE,
+                    confirmed TINYINT(1) DEFAULT 0,
                     confirmation_message TEXT,
-                    confirmation_time TEXT,
-                    escalation_level INTEGER DEFAULT 0,
-                    next_escalation_time TEXT,
+                    confirmation_time VARCHAR(255),
+                    escalation_level INT DEFAULT 0,
+                    next_escalation_time VARCHAR(255),
                     escalation_messages_sent TEXT DEFAULT '[]',
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (customer_id) REFERENCES customers (id),
-                    UNIQUE(customer_id, reminder_date)
+                    UNIQUE KEY unique_customer_date (customer_id, reminder_date)
                 )
             ''')
             
@@ -129,7 +155,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO messages (sender, message, timestamp, action, ai_processed, response)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
             ''', (
                 message_data.get('sender', ''),
                 message_data.get('message', ''),
@@ -152,32 +178,28 @@ class Database:
             List of message dictionaries
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM messages 
                 ORDER BY timestamp DESC 
-                LIMIT ?
+                LIMIT %s
             ''', (limit,))
             
-            messages = []
-            for row in cursor.fetchall():
-                messages.append(dict(row))
-            
-            return messages
+            return cursor.fetchall()
     
     def get_statistics(self) -> Dict:
         """
-        Get message processing statistics
+        Get database statistics
         
         Returns:
-            Dictionary with statistics
+            Dictionary with various statistics
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             
-            # Get total counts
-            cursor.execute('SELECT COUNT(*) as total FROM messages')
-            total_messages = cursor.fetchone()['total']
+            # Get total messages
+            cursor.execute('SELECT COUNT(*) as total_messages FROM messages')
+            total_messages = cursor.fetchone()['total_messages']
             
             # Get action counts
             cursor.execute('''
@@ -186,14 +208,11 @@ class Database:
                 WHERE action IS NOT NULL 
                 GROUP BY action
             ''')
-            
-            action_counts = {}
-            for row in cursor.fetchall():
-                action_counts[row['action']] = row['count']
+            action_counts = {row['action']: row['count'] for row in cursor.fetchall()}
             
             # Get AI processed count
-            cursor.execute('SELECT COUNT(*) as count FROM messages WHERE ai_processed = 1')
-            ai_processed = cursor.fetchone()['count']
+            cursor.execute('SELECT COUNT(*) as ai_processed FROM messages WHERE ai_processed = 1')
+            ai_processed = cursor.fetchone()['ai_processed']
             
             return {
                 'total_messages': total_messages,
@@ -219,7 +238,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO reminders (scheduled_time, message)
-                VALUES (?, ?)
+                VALUES (%s, %s)
             ''', (scheduled_time, message))
             conn.commit()
             return cursor.lastrowid
@@ -235,8 +254,8 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE reminders 
-                SET sent = 1, sent_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                SET sent = 1, sent_at = NOW()
+                WHERE id = %s
             ''', (reminder_id,))
             conn.commit()
     
@@ -248,18 +267,14 @@ class Database:
             List of pending reminder dictionaries
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM reminders 
                 WHERE sent = 0 
                 ORDER BY scheduled_time ASC
             ''')
             
-            reminders = []
-            for row in cursor.fetchall():
-                reminders.append(dict(row))
-            
-            return reminders
+            return cursor.fetchall()
     
     def get_last_reminder_date(self) -> Optional[str]:
         """
@@ -269,7 +284,7 @@ class Database:
             Date string of last reminder or None
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT scheduled_date FROM reminders 
                 WHERE sent = 1 
@@ -282,27 +297,32 @@ class Database:
     
     def save_scheduled_reminder(self, scheduled_time: datetime, message: str = None):
         """
-        Save a scheduled reminder for future reference
+        Save a scheduled reminder with date tracking
         
         Args:
-            scheduled_time: When the reminder should be sent
-            message: Optional message (will be generated if None)
+            scheduled_time: datetime object for when to send
+            message: Optional message, uses default if None
         """
+        from config import Config
+        
+        message = message or Config.REMINDER_MESSAGE
+        scheduled_date = scheduled_time.strftime('%Y-%m-%d')
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO reminders (scheduled_time, message, scheduled_date)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
             ''', (
                 scheduled_time.isoformat(),
-                message or "AI-generated reminder",
-                scheduled_time.date().isoformat()
+                message,
+                scheduled_date
             ))
             conn.commit()
     
     def get_missed_reminders(self, days_back: int = 7) -> List[Dict]:
         """
-        Get reminders that were missed in the last N days
+        Get reminders that were scheduled but never sent
         
         Args:
             days_back: Number of days to look back
@@ -311,56 +331,67 @@ class Database:
             List of missed reminder dictionaries
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM reminders 
                 WHERE sent = 0 
-                AND scheduled_date >= date('now', '-{} days')
+                AND scheduled_time < NOW() 
+                AND scheduled_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
                 ORDER BY scheduled_time DESC
-            '''.format(days_back))
+            ''', (days_back,))
             
-            reminders = []
-            for row in cursor.fetchall():
-                reminders.append(dict(row))
-            
-            return reminders
+            return cursor.fetchall()
     
     def cleanup_old_messages(self, days_to_keep: int = 90):
         """
-        Clean up old messages to keep database size manageable
+        Remove old messages to keep database size manageable
         
         Args:
-            days_to_keep: Number of days to keep messages
+            days_to_keep: Number of days of messages to keep
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 DELETE FROM messages 
-                WHERE datetime(timestamp) < datetime('now', '-{} days')
-            '''.format(days_to_keep))
+                WHERE created_at < DATE_SUB(NOW(), INTERVAL %s DAY)
+            ''', (days_to_keep,))
             conn.commit()
     
     def get_database_size(self) -> int:
         """
-        Get database file size in bytes
+        Get approximate database size in bytes
         
         Returns:
-            Database file size
+            Size in bytes
         """
-        try:
-            return os.path.getsize(self.db_path)
-        except FileNotFoundError:
-            return 0
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT SUM(data_length + index_length) as size
+                FROM information_schema.tables 
+                WHERE table_schema = DATABASE()
+            ''')
+            result = cursor.fetchone()
+            return result[0] or 0
     
     def backup_database(self, backup_path: str):
         """
         Create a backup of the database
+        Note: This is a placeholder - actual MySQL backup would require mysqldump
         
         Args:
-            backup_path: Path for the backup file
+            backup_path: Path where to save backup
         """
-        import shutil
-        shutil.copy2(self.db_path, backup_path)
+        # For MySQL, backup would typically use mysqldump command
+        # This is a simplified version that exports data as JSON
+        backup_data = {
+            'messages': self.get_message_history(1000),
+            'customers': self.get_customers(active_only=False),
+            'statistics': self.get_statistics()
+        }
+        
+        with open(backup_path, 'w') as f:
+            json.dump(backup_data, f, indent=2, default=str)
     
     # Customer management methods
     def add_customer(self, phone_number: str, name: str = None, reminder_time: str = '20:00') -> int:
@@ -379,7 +410,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO customers (phone_number, name, reminder_time)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
             ''', (phone_number, name, reminder_time))
             conn.commit()
             return cursor.lastrowid
@@ -395,7 +426,7 @@ class Database:
             List of customer dictionaries
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             if active_only:
                 cursor.execute('''
                     SELECT * FROM customers 
@@ -408,11 +439,7 @@ class Database:
                     ORDER BY created_at DESC
                 ''')
             
-            customers = []
-            for row in cursor.fetchall():
-                customers.append(dict(row))
-            
-            return customers
+            return cursor.fetchall()
     
     def get_customer_by_phone(self, phone_number: str) -> Optional[Dict]:
         """
@@ -425,88 +452,87 @@ class Database:
             Customer dictionary or None if not found
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM customers 
-                WHERE phone_number = ?
+                WHERE phone_number = %s
             ''', (phone_number,))
             
-            result = cursor.fetchone()
-            return dict(result) if result else None
+            return cursor.fetchone()
     
     def update_customer(self, customer_id: int, name: str = None, is_active: bool = None, reminder_time: str = None) -> bool:
         """
-        Update a customer's information
+        Update customer information
         
         Args:
-            customer_id: ID of the customer to update
+            customer_id: ID of customer to update
             name: New name (optional)
             is_active: New active status (optional)
-            reminder_time: New reminder time in HH:MM format (optional)
+            reminder_time: New reminder time (optional)
             
         Returns:
-            True if updated successfully, False otherwise
+            True if update successful
         """
+        updates = []
+        values = []
+        
+        if name is not None:
+            updates.append("name = %s")
+            values.append(name)
+        
+        if is_active is not None:
+            updates.append("is_active = %s")
+            values.append(is_active)
+        
+        if reminder_time is not None:
+            updates.append("reminder_time = %s")
+            values.append(reminder_time)
+        
+        if not updates:
+            return False
+        
+        updates.append("updated_at = NOW()")
+        values.append(customer_id)
+        
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Build update query dynamically
-            update_fields = []
-            params = []
-            
-            if name is not None:
-                update_fields.append('name = ?')
-                params.append(name)
-            
-            if is_active is not None:
-                update_fields.append('is_active = ?')
-                params.append(is_active)
-            
-            if reminder_time is not None:
-                update_fields.append('reminder_time = ?')
-                params.append(reminder_time)
-            
-            if not update_fields:
-                return False
-            
-            update_fields.append('updated_at = CURRENT_TIMESTAMP')
-            params.append(customer_id)
-            
-            query = f'''
-                UPDATE customers 
-                SET {', '.join(update_fields)}
-                WHERE id = ?
-            '''
-            
-            cursor.execute(query, params)
+            query = f"UPDATE customers SET {', '.join(updates)} WHERE id = %s"
+            cursor.execute(query, values)
             conn.commit()
+            
             return cursor.rowcount > 0
     
     def delete_customer(self, customer_id: int) -> bool:
         """
-        Delete a customer (soft delete by setting is_active to False)
+        Delete a customer (soft delete - mark as inactive)
         
         Args:
-            customer_id: ID of the customer to delete
+            customer_id: ID of customer to delete
             
         Returns:
-            True if deleted successfully, False otherwise
+            True if deletion successful
         """
         return self.update_customer(customer_id, is_active=False)
     
     def get_active_phone_numbers(self) -> List[str]:
         """
-        Get all active phone numbers for sending reminders
+        Get list of all active customer phone numbers
         
         Returns:
-            List of active phone numbers
+            List of phone numbers
         """
-        customers = self.get_customers(active_only=True)
-        return [customer['phone_number'] for customer in customers]
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT phone_number FROM customers 
+                WHERE is_active = 1
+            ''')
+            
+            return [row[0] for row in cursor.fetchall()]
     
     def get_customers_by_reminder_time(self, reminder_time: str) -> List[Dict]:
         """
-        Get all active customers with a specific reminder time
+        Get customers who have reminders at a specific time
         
         Args:
             reminder_time: Time in HH:MM format
@@ -515,18 +541,14 @@ class Database:
             List of customer dictionaries
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM customers 
-                WHERE is_active = 1 AND reminder_time = ?
+                WHERE is_active = 1 AND reminder_time = %s
                 ORDER BY created_at DESC
             ''', (reminder_time,))
             
-            customers = []
-            for row in cursor.fetchall():
-                customers.append(dict(row))
-            
-            return customers
+            return cursor.fetchall()
     
     def get_all_reminder_times(self) -> List[str]:
         """
@@ -543,11 +565,7 @@ class Database:
                 ORDER BY reminder_time
             ''')
             
-            times = []
-            for row in cursor.fetchall():
-                times.append(row['reminder_time'])
-            
-            return times
+            return [row[0] for row in cursor.fetchall()]
     
     # Daily reminders tracking methods
     def create_daily_reminder(self, customer_id: int, reminder_date: str, reminder_time: str, message_sent: str) -> int:
@@ -567,7 +585,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO daily_reminders (customer_id, reminder_date, reminder_time, message_sent)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
             ''', (customer_id, reminder_date, reminder_time, message_sent))
             conn.commit()
             return cursor.lastrowid
@@ -584,36 +602,36 @@ class Database:
             Daily reminder dictionary or None if not found
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT * FROM daily_reminders 
-                WHERE customer_id = ? AND reminder_date = ?
+                WHERE customer_id = %s AND reminder_date = %s
             ''', (customer_id, reminder_date))
             
-            result = cursor.fetchone()
-            return dict(result) if result else None
+            return cursor.fetchone()
     
     def update_daily_reminder_confirmation(self, customer_id: int, reminder_date: str, confirmed: bool, confirmation_message: str = None) -> bool:
         """
-        Update the confirmation status of a daily reminder
+        Update daily reminder confirmation status
         
         Args:
             customer_id: ID of the customer
             reminder_date: Date in YYYY-MM-DD format
             confirmed: Whether the reminder was confirmed
-            confirmation_message: The message that confirmed it
+            confirmation_message: Optional confirmation message
             
         Returns:
-            True if updated successfully, False otherwise
+            True if update successful
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 UPDATE daily_reminders 
-                SET confirmed = ?, confirmation_message = ?, confirmation_time = CURRENT_TIMESTAMP
-                WHERE customer_id = ? AND reminder_date = ?
+                SET confirmed = %s, confirmation_message = %s, confirmation_time = NOW()
+                WHERE customer_id = %s AND reminder_date = %s
             ''', (confirmed, confirmation_message, customer_id, reminder_date))
             conn.commit()
+            
             return cursor.rowcount > 0
     
     def get_pending_confirmations(self, days_back: int = 7) -> List[Dict]:
@@ -627,21 +645,17 @@ class Database:
             List of pending confirmation reminders
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT dr.*, c.name as customer_name, c.phone_number
                 FROM daily_reminders dr
                 JOIN customers c ON dr.customer_id = c.id
                 WHERE dr.confirmed = 0 
-                AND dr.reminder_date >= date('now', '-{} days')
+                AND STR_TO_DATE(dr.reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
                 ORDER BY dr.reminder_date DESC, dr.reminder_time DESC
-            '''.format(days_back))
+            ''', (days_back,))
             
-            reminders = []
-            for row in cursor.fetchall():
-                reminders.append(dict(row))
-            
-            return reminders
+            return cursor.fetchall()
     
     def get_confirmation_stats(self, days_back: int = 30) -> Dict:
         """
@@ -654,27 +668,27 @@ class Database:
             Dictionary with confirmation statistics
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             
             # Get total reminders
             cursor.execute('''
                 SELECT COUNT(*) as total FROM daily_reminders 
-                WHERE reminder_date >= date('now', '-{} days')
-            '''.format(days_back))
+                WHERE STR_TO_DATE(reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            ''', (days_back,))
             total = cursor.fetchone()['total']
             
             # Get confirmed reminders
             cursor.execute('''
                 SELECT COUNT(*) as confirmed FROM daily_reminders 
-                WHERE confirmed = 1 AND reminder_date >= date('now', '-{} days')
-            '''.format(days_back))
+                WHERE confirmed = 1 AND STR_TO_DATE(reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            ''', (days_back,))
             confirmed = cursor.fetchone()['confirmed']
             
             # Get pending reminders
             cursor.execute('''
                 SELECT COUNT(*) as pending FROM daily_reminders 
-                WHERE confirmed = 0 AND reminder_date >= date('now', '-{} days')
-            '''.format(days_back))
+                WHERE confirmed = 0 AND STR_TO_DATE(reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            ''', (days_back,))
             pending = cursor.fetchone()['pending']
             
             return {
@@ -687,101 +701,67 @@ class Database:
     # Escalation methods
     def get_reminders_needing_escalation(self) -> List[Dict]:
         """
-        Get reminders that need escalation
+        Get reminders that need escalation (unconfirmed past reminders)
         
         Returns:
-            List of reminders that need escalation
+            List of reminders needing escalation
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute('''
                 SELECT dr.*, c.name as customer_name, c.phone_number
                 FROM daily_reminders dr
                 JOIN customers c ON dr.customer_id = c.id
                 WHERE dr.confirmed = 0 
-                AND dr.escalation_level < 4
-                AND dr.next_escalation_time <= datetime('now')
-                AND datetime(dr.created_at) >= datetime('now', '-2 hours')
-                ORDER BY dr.next_escalation_time ASC
+                AND STR_TO_DATE(dr.reminder_date, '%Y-%m-%d') < CURDATE()
+                AND (dr.next_escalation_time IS NULL OR STR_TO_DATE(dr.next_escalation_time, '%Y-%m-%d %H:%i:%s') <= NOW())
+                ORDER BY dr.reminder_date ASC
             ''')
             
-            reminders = []
-            for row in cursor.fetchall():
-                reminders.append(dict(row))
-            
-            return reminders
+            return cursor.fetchall()
     
-    def update_escalation_level(self, reminder_id: int, escalation_level: int, escalation_message: str, next_escalation_time: str) -> bool:
+    def update_escalation(self, reminder_id: int, escalation_level: int, next_escalation_time: str, escalation_message: str) -> bool:
         """
-        Update escalation level and add message to sent list
+        Update escalation information for a reminder
         
         Args:
-            reminder_id: ID of the reminder to update
+            reminder_id: ID of the daily reminder
             escalation_level: New escalation level
+            next_escalation_time: When to send next escalation
             escalation_message: Message that was sent
-            next_escalation_time: When next escalation should be sent
             
         Returns:
-            True if updated successfully, False otherwise
+            True if update successful
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
             # Get current escalation messages
             cursor.execute('''
-                SELECT escalation_messages_sent FROM daily_reminders WHERE id = ?
+                SELECT escalation_messages_sent FROM daily_reminders WHERE id = %s
             ''', (reminder_id,))
-            
             result = cursor.fetchone()
-            if not result:
-                return False
             
-            # Parse existing messages and add new one
-            import json
-            try:
-                messages_sent = json.loads(result['escalation_messages_sent'])
-            except (json.JSONDecodeError, TypeError):
-                messages_sent = []
+            if result:
+                current_messages = json.loads(result[0] or '[]')
+                current_messages.append({
+                    'level': escalation_level,
+                    'message': escalation_message,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+                cursor.execute('''
+                    UPDATE daily_reminders 
+                    SET escalation_level = %s, 
+                        next_escalation_time = %s,
+                        escalation_messages_sent = %s
+                    WHERE id = %s
+                ''', (escalation_level, next_escalation_time, json.dumps(current_messages), reminder_id))
+                conn.commit()
+                
+                return cursor.rowcount > 0
             
-            messages_sent.append({
-                'level': escalation_level,
-                'message': escalation_message,
-                'sent_at': datetime.now().isoformat()
-            })
-            
-            # Update escalation level and messages
-            cursor.execute('''
-                UPDATE daily_reminders 
-                SET escalation_level = ?, 
-                    next_escalation_time = ?,
-                    escalation_messages_sent = ?
-                WHERE id = ?
-            ''', (escalation_level, next_escalation_time, json.dumps(messages_sent), reminder_id))
-            
-            conn.commit()
-            return cursor.rowcount > 0
-    
-    def stop_escalations_for_customer(self, customer_id: int, reminder_date: str) -> bool:
-        """
-        Stop escalations for a customer on a specific date (when they confirm)
-        
-        Args:
-            customer_id: ID of the customer
-            reminder_date: Date of the reminder
-            
-        Returns:
-            True if updated successfully, False otherwise
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                UPDATE daily_reminders 
-                SET next_escalation_time = NULL
-                WHERE customer_id = ? AND reminder_date = ?
-            ''', (customer_id, reminder_date))
-            
-            conn.commit()
-            return cursor.rowcount > 0
+            return False
     
     def get_escalation_stats(self, days_back: int = 30) -> Dict:
         """
@@ -794,14 +774,14 @@ class Database:
             Dictionary with escalation statistics
         """
         with self.get_connection() as conn:
-            cursor = conn.cursor()
+            cursor = conn.cursor(dictionary=True)
             
             # Get total escalations sent
             cursor.execute('''
                 SELECT COUNT(*) as total_escalations FROM daily_reminders 
                 WHERE escalation_level > 0 
-                AND reminder_date >= date('now', '-{} days')
-            '''.format(days_back))
+                AND STR_TO_DATE(reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+            ''', (days_back,))
             total_escalations = cursor.fetchone()['total_escalations']
             
             # Get escalations by level
@@ -809,15 +789,15 @@ class Database:
                 SELECT escalation_level, COUNT(*) as count 
                 FROM daily_reminders 
                 WHERE escalation_level > 0 
-                AND reminder_date >= date('now', '-{} days')
+                AND STR_TO_DATE(reminder_date, '%Y-%m-%d') >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
                 GROUP BY escalation_level
-            '''.format(days_back))
+            ''', (days_back,))
             
             escalation_by_level = {}
             for row in cursor.fetchall():
-                escalation_by_level[row['escalation_level']] = row['count']
+                escalation_by_level[f"level_{row['escalation_level']}"] = row['count']
             
             return {
                 'total_escalations': total_escalations,
-                'escalation_by_level': escalation_by_level
-            } 
+                'by_level': escalation_by_level
+            }
