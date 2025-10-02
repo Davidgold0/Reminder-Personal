@@ -146,7 +146,7 @@ class Database:
                     confirmation_time VARCHAR(255),
                     escalation_level INT DEFAULT 0,
                     next_escalation_time VARCHAR(255),
-                    escalation_messages_sent TEXT DEFAULT '[]',
+                    escalation_messages_sent TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (customer_id) REFERENCES customers (id),
                     UNIQUE KEY unique_customer_date (customer_id, reminder_date)
@@ -757,7 +757,9 @@ class Database:
             result = cursor.fetchone()
             
             if result:
-                current_messages = json.loads(result[0] or '[]')
+                # Handle NULL or empty values - initialize as empty list if None
+                messages_json = result[0] if result[0] is not None else '[]'
+                current_messages = json.loads(messages_json)
                 current_messages.append({
                     'level': escalation_level,
                     'message': escalation_message,
