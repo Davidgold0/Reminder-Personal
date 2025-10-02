@@ -1,7 +1,7 @@
 import mysql.connector
 from mysql.connector import Error
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import os
 from contextlib import contextmanager
@@ -747,7 +747,7 @@ class Database:
                 current_messages.append({
                     'level': escalation_level,
                     'message': escalation_message,
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now(timezone.utc).isoformat()
                 })
                 
                 cursor.execute('''

@@ -6,7 +6,7 @@ Test script for the escalation system
 import os
 import sys
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytz
 
 # Add the current directory to Python path to import our modules
@@ -113,8 +113,8 @@ def test_escalation_flow():
     escalation_logic = EscalationLogic()
     
     # Get current time
-    israel_tz = pytz.timezone(Config.TIMEZONE)
-    current_time = datetime.now(israel_tz)
+    utc_tz = timezone.utc
+    current_time = datetime.now(utc_tz)
     
     # Create a test reminder that needs escalation
     print("Creating test reminder...")

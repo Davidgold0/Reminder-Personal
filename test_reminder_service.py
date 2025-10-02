@@ -7,7 +7,7 @@ Tests the HTTP API communication between reminder service and main app
 import os
 import sys
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 def test_main_app_endpoints(main_app_url):
     """Test main app API endpoints"""
@@ -30,7 +30,7 @@ def test_main_app_endpoints(main_app_url):
         ('/api/reminders/last-date', 'GET'),
         ('/api/reminders/missed-info', 'POST', {'days_back': 7}),
         ('/api/reminders/save', 'POST', {
-            'scheduled_time': datetime.now().isoformat(),
+            'scheduled_time': datetime.now(timezone.utc).isoformat(),
             'message': 'Test reminder message'
         })
     ]

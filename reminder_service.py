@@ -1,7 +1,7 @@
 import os
 import sys
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 
 # Add the current directory to Python path to import our modules
@@ -11,7 +11,7 @@ from config import Config
 
 class ReminderService:
     def __init__(self, main_app_url: str = None):
-        self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        self.utc_tz = timezone.utc  # Use UTC timezone
         
         # Main app URL for API calls
         self.main_app_url = main_app_url or os.environ.get('MAIN_APP_URL', 'http://localhost:5000')
@@ -76,8 +76,8 @@ class ReminderService:
             True if the API call was successful, False otherwise
         """
         try:
-            current_time = datetime.now(self.israel_tz)
-            print(f"🔔 Triggering reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            current_time = datetime.now(self.utc_tz)
+            print(f"🔔 Triggering reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
             
             # Call the main app to handle the reminder logic
             response = self._call_main_app_api('/api/reminder/trigger', method='POST')
@@ -101,8 +101,8 @@ class ReminderService:
             True if the API call was successful, False otherwise
         """
         try:
-            current_time = datetime.now(self.israel_tz)
-            print(f"🚨 Checking escalations at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            current_time = datetime.now(self.utc_tz)
+            print(f"🚨 Checking escalations at {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
             
             # Call the main app to handle escalation logic
             response = self._call_main_app_api('/api/escalation/check', method='POST')

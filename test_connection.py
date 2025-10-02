@@ -6,7 +6,7 @@ Test script to debug connection issues between reminder service and main app
 import os
 import sys
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 import pytz
 
 def test_main_app_connection(main_app_url):
@@ -44,16 +44,16 @@ def test_timezone_handling():
     """Test timezone handling"""
     print("\n🕐 Testing timezone handling...")
     
-    israel_tz = pytz.timezone("Asia/Jerusalem")
-    now = datetime.now(israel_tz)
+    utc_tz = timezone.utc
+    now = datetime.now(utc_tz)
     today = now.date()
     
-    print(f"   Current time (Israel): {now}")
+    print(f"   Current time (UTC): {now}")
     print(f"   Today's date: {today}")
     
     # Test reminder time calculation
     from datetime import time
-    reminder_time = datetime.combine(today, time(20, 0)).replace(tzinfo=israel_tz)
+    reminder_time = datetime.combine(today, time(17, 0)).replace(tzinfo=utc_tz)  # 5 PM UTC
     print(f"   Reminder time: {reminder_time}")
     
     # Test time difference calculation

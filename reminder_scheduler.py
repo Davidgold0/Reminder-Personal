@@ -1,7 +1,7 @@
 import schedule
 import time
 import pytz
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timezone
 from green_api_client import GreenAPIClient
 from config import Config
 from database import Database
@@ -11,7 +11,7 @@ import os
 class ReminderScheduler:
     def __init__(self):
         self.green_api = GreenAPIClient()
-        self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        self.utc_tz = timezone.utc  # Use UTC timezone
         self.db = Database()
         self.last_reminder_sent = None
         
@@ -84,8 +84,8 @@ class ReminderScheduler:
     def send_daily_reminder(self):
         """Send the daily pill reminder"""
         try:
-            current_time = datetime.now(self.israel_tz)
-            print(f"Sending daily pill reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            current_time = datetime.now(self.utc_tz)
+            print(f"Sending daily pill reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
             
             # Generate AI message or use default
             reminder_message = self.generate_ai_reminder_message()
@@ -113,8 +113,8 @@ class ReminderScheduler:
             print(f"Error sending daily reminder: {e}")
     
     def should_send_reminder(self):
-        """Check if it's time to send the reminder based on Israel timezone"""
-        now = datetime.now(self.israel_tz)
+        """Check if it's time to send the reminder based on UTC timezone"""
+        now = datetime.now(self.utc_tz)
         
         # Parse the reminder time
         reminder_hour, reminder_minute = map(int, Config.REMINDER_TIME.split(':'))
@@ -167,7 +167,7 @@ class ReminderScheduler:
     
     def get_next_reminder_time(self):
         """Get the next scheduled reminder time"""
-        now = datetime.now(self.israel_tz)
+        now = datetime.now(self.utc_tz)
         reminder_hour, reminder_minute = map(int, Config.REMINDER_TIME.split(':'))
         
         # Calculate next reminder time

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from database import Database
 from escalation_logic import EscalationLogic
-from datetime import datetime
+from datetime import datetime, timezone
 
 escalation_routes = Blueprint('escalation_routes', __name__)
 
@@ -46,7 +46,7 @@ def check_and_send_escalations():
                 
                 if success:
                     # Update escalation level in database
-                    current_time = datetime.now()
+                    current_time = datetime.now(timezone.utc)
                     next_escalation_time = escalation_logic.calculate_next_escalation_time(
                         current_time, 
                         reminder['escalation_level'] + 1

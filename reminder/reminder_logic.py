@@ -1,9 +1,9 @@
 import os
 import sys
 import requests
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 import pytz
-from typing import Optional
+from typing import Optional, List
 
 # Add the current directory to Python path to import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,7 +16,7 @@ from database import Database
 class ReminderLogic:
     def __init__(self):
         self.green_api = GreenAPIClient()
-        self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        self.utc_tz = timezone.utc  # Use UTC timezone
         
         # Initialize OpenAI if enabled
         if Config.OPENAI_ENABLED and Config.OPENAI_API_KEY:
@@ -119,7 +119,7 @@ class ReminderLogic:
         Returns:
             True if a missed reminder was sent, False otherwise
         """
-        now = datetime.now(self.israel_tz)
+        now = datetime.now(self.utc_tz)
         today = now.date()
         
         # Check if we sent a reminder today
@@ -131,7 +131,7 @@ class ReminderLogic:
                 last_datetime = datetime.fromisoformat(last_reminder_date)
                 if last_datetime.tzinfo is None:
                     # If timezone-naive, assume it's in Israel timezone
-                    last_datetime = self.israel_tz.localize(last_datetime)
+                    last_datetime = last_datetime.replace(tzinfo=self.utc_tz)
                 last_date = last_datetime.date()
                 if last_date >= today:
                     print(f"✅ Reminder already sent today ({today})")
@@ -141,7 +141,7 @@ class ReminderLogic:
                 pass
         
         # Check if it's still reasonable to send (within 2 hours of scheduled time)
-        reminder_time = datetime.combine(today, time(20, 0)).replace(tzinfo=self.israel_tz)  # 8:00 PM
+        reminder_time = datetime.combine(today, time(17, 0)).replace(tzinfo=self.utc_tz)  # 5:00 PM UTC (equivalent to 8:00 PM Israel time)
         time_diff = abs((now - reminder_time).total_seconds() / 3600)
         
         if time_diff <= 2:  # Within 2 hours
@@ -162,7 +162,7 @@ class ReminderLogic:
             True if reminders were sent, False otherwise
         """
         try:
-            now = datetime.now(self.israel_tz)
+            now = datetime.now(self.utc_tz)
             current_time_str = now.strftime('%H:%M')
             
             # Check if current time matches the reminder time (within 1 minute)
@@ -203,7 +203,7 @@ class ReminderLogic:
             True if sent successfully to at least one customer, False otherwise
         """
         try:
-            current_time = datetime.now(self.israel_tz)
+            current_time = datetime.now(self.utc_tz)
             print(f"Sending {'missed ' if is_missed else ''}reminder at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # Generate AI message

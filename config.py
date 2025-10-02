@@ -13,11 +13,11 @@ class Config:
     RECIPIENT_PHONE = os.getenv('RECIPIENT_PHONE')
     
     # Reminder settings
-    REMINDER_TIME = "20:00"  # 8:00 PM Israel time
+    REMINDER_TIME = "17:00"  # 5:00 PM UTC (equivalent to 8:00 PM Israel time)
     REMINDER_MESSAGE = "זמן לכדור! 💊"
     
-    # Timezone
-    TIMEZONE = "Asia/Jerusalem"
+    # Timezone (changed to UTC for consistency)
+    TIMEZONE = "UTC"
     
     # API endpoints
     GREEN_API_BASE_URL = "https://api.green-api.com"

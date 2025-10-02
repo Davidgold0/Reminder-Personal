@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from openai import OpenAI
 from config import Config
@@ -133,7 +133,7 @@ class MessageProcessor:
                 return None
             
             # Check if there's a pending daily reminder for today
-            today = datetime.now().date().isoformat()
+            today = datetime.now(timezone.utc).date().isoformat()
             daily_reminder = self.db.get_daily_reminder(customer['id'], today)
             
             if not daily_reminder:
@@ -185,7 +185,7 @@ class MessageProcessor:
             
             message_body = message_data['body'].strip()
             sender = message_data.get('senderData', {}).get('chatId', '').split('@')[0]
-            timestamp = datetime.now().isoformat()
+            timestamp = datetime.now(timezone.utc).isoformat()
             
             # Create message record
             message_record = {

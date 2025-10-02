@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, jsonify
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Create blueprint
 app_control = Blueprint('app_control', __name__)
@@ -48,13 +48,13 @@ def api_status():
 @app_control.route('/health')
 def health_check():
     """Health check endpoint for Railway"""
-    return jsonify({"status": "healthy", "timestamp": datetime.now().isoformat()})
+    return jsonify({"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 @app_control.route('/cron-test')
 def cron_test():
     """Simple endpoint for Railway cron to test connectivity"""
     return jsonify({
         "status": "cron_test_ok", 
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "message": "Cron can reach this endpoint"
     }) 

@@ -14,7 +14,7 @@ from openai import OpenAI
 class EscalationLogic:
     def __init__(self):
         self.green_api = GreenAPIClient()
-        self.israel_tz = pytz.timezone(Config.TIMEZONE)
+        self.utc_tz = pytz.timezone('UTC')  # Use UTC timezone
         
         # Initialize OpenAI if enabled
         if Config.OPENAI_ENABLED and Config.OPENAI_API_KEY:
@@ -181,7 +181,7 @@ class EscalationLogic:
         
         # Stop if more than 2 hours have passed since initial reminder
         created_at = datetime.fromisoformat(reminder_data['created_at'])
-        current_time = datetime.now(self.israel_tz)
+        current_time = datetime.now(self.utc_tz)
         time_diff = (current_time - created_at).total_seconds() / 3600
         
         if time_diff > 2:

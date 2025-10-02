@@ -1,6 +1,6 @@
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import os
 from contextlib import contextmanager
@@ -746,7 +746,7 @@ class Database:
             messages_sent.append({
                 'level': escalation_level,
                 'message': escalation_message,
-                'sent_at': datetime.now().isoformat()
+                'sent_at': datetime.now(timezone.utc).isoformat()
             })
             
             # Update escalation level and messages
