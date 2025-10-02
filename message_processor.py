@@ -9,8 +9,17 @@ import os
 
 class MessageProcessor:
     def __init__(self):
-        self.db = Database()
-        self.confirmation_ai = ConfirmationAI()
+        try:
+            self.db = Database()
+        except Exception as e:
+            print(f"❌ Failed to initialize database: {e}")
+            self.db = None
+            
+        try:
+            self.confirmation_ai = ConfirmationAI()
+        except Exception as e:
+            print(f"❌ Failed to initialize confirmation AI: {e}")
+            self.confirmation_ai = None
         self.response_templates = {
             "confirm": "מעולה! רשמתי שלקחת את הגלולה. תישארי בריאה! 💪",
             "missed": "אל דאגה! קחי אותה בהקדם האפשרי. הבריאות שלך חשובה! 🏥",

@@ -55,6 +55,13 @@ def validate_reminder_time(reminder_time: str) -> bool:
 def get_customers():
     """Get all customers"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         active_only = request.args.get('active_only', 'true').lower() == 'true'
         customers = db.get_customers(active_only=active_only)
         
@@ -73,6 +80,13 @@ def get_customers():
 def add_customer():
     """Add a new customer"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         data = request.get_json()
         
         if not data:
@@ -135,6 +149,13 @@ def add_customer():
 def update_customer(customer_id):
     """Update a customer"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         data = request.get_json()
         
         if not data:
@@ -178,6 +199,13 @@ def update_customer(customer_id):
 def delete_customer(customer_id):
     """Delete a customer (soft delete)"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         success = db.delete_customer(customer_id)
         
         if not success:
@@ -201,6 +229,13 @@ def delete_customer(customer_id):
 def get_active_phone_numbers():
     """Get all active phone numbers for sending reminders"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         phone_numbers = db.get_active_phone_numbers()
         
         return jsonify({
@@ -219,6 +254,13 @@ def get_active_phone_numbers():
 def get_customers_by_time(reminder_time):
     """Get all active customers with a specific reminder time"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         # Validate time format
         if not validate_reminder_time(reminder_time):
             return jsonify({
@@ -245,6 +287,13 @@ def get_customers_by_time(reminder_time):
 def get_all_reminder_times():
     """Get all unique reminder times from active customers"""
     try:
+        # Check if database is available
+        if db is None:
+            return jsonify({
+                'success': False,
+                'error': 'Database not initialized - check server configuration and database connection'
+            }), 503
+        
         reminder_times = db.get_all_reminder_times()
         
         return jsonify({

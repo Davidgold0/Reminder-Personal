@@ -13,8 +13,22 @@ class Database:
         """
         Initialize MySQL database connection for Railway deployment
         """
-        self.connection_params = self._get_connection_params()
-        self._create_tables()
+        try:
+            self.connection_params = self._get_connection_params()
+            print(f"🔗 Attempting database connection to {self.connection_params.get('host')}:{self.connection_params.get('port')}")
+            self._create_tables()
+            print("✅ Database initialized successfully")
+        except Exception as e:
+            print(f"❌ Database initialization failed: {e}")
+            print(f"❌ Connection params: {self._redact_password(self.connection_params) if hasattr(self, 'connection_params') else 'Not set'}")
+            raise e
+    
+    def _redact_password(self, params):
+        """Return connection params with password redacted for logging"""
+        redacted = params.copy()
+        if 'password' in redacted:
+            redacted['password'] = '***'
+        return redacted
     
     def _get_connection_params(self):
         """Get MySQL connection parameters from Railway or individual config"""
