@@ -165,12 +165,45 @@ class ReminderLogic:
             now = datetime.now(self.utc_tz)
             current_time_str = now.strftime('%H:%M')
             
-            # Check if current time matches the reminder time (within 1 minute)
-            if current_time_str == reminder_time:
-                print(f"⏰ It's time to send reminders for {reminder_time}")
-                return self.send_reminder(specific_time=reminder_time)
+            # Parse the reminder time
+            reminder_hour, reminder_minute = map(int, reminder_time.split(':'))
+            current_hour = now.hour
+            current_minute = now.minute
+            
+            # Calculate time difference in minutes
+            reminder_total_minutes = reminder_hour * 60 + reminder_minute
+            current_total_minutes = current_hour * 60 + current_minute
+            time_diff = current_total_minutes - reminder_total_minutes
+            
+            # Check if we're within the right time window for sending reminders
+            # We want to send when we're AT or PAST the reminder time, but not too far past
+            # (to handle 15-minute cron intervals)
+            if 0 <= time_diff <= 15:
+                print(f"⏰ It's time to send reminders for {reminder_time} (current: {current_time_str}, {time_diff} minutes past)")
+                
+                # Check if we already sent reminders for this time today
+                db = Database()
+                today = now.date().isoformat()
+                customers = db.get_customers_by_reminder_time(reminder_time)
+                
+                # Check if any customer already has a daily reminder record for today
+                already_sent = False
+                for customer in customers:
+                    existing_reminder = db.get_daily_reminder(customer['id'], today)
+                    if existing_reminder:
+                        already_sent = True
+                        break
+                
+                if already_sent:
+                    print(f"✅ Reminders for {reminder_time} already sent today")
+                    return False
+                else:
+                    return self.send_reminder(specific_time=reminder_time)
             else:
-                print(f"⏰ Not time for {reminder_time} reminders yet (current: {current_time_str})")
+                if time_diff < 0:
+                    print(f"⏰ Not time for {reminder_time} reminders yet (current: {current_time_str}, {abs(time_diff)} minutes early)")
+                else:
+                    print(f"⏰ Too late for {reminder_time} reminders (current: {current_time_str}, {time_diff} minutes past)")
                 return False
                 
         except Exception as e:
