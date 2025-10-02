@@ -293,7 +293,8 @@ class ReminderLogic:
             reminder_time_str = current_time.strftime('%H:%M')
             
             # Calculate next escalation time (30 minutes from now)
-            next_escalation_time = (current_time + timedelta(minutes=30)).isoformat()
+            # Use MySQL-compatible format
+            next_escalation_time = (current_time + timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S')
             
             for customer in customers:
                 try:

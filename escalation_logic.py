@@ -159,7 +159,8 @@ class EscalationLogic:
         """
         # Each escalation is 30 minutes apart
         next_time = current_time + timedelta(minutes=30)
-        return next_time.isoformat()
+        # Return format compatible with MySQL STR_TO_DATE function
+        return next_time.strftime('%Y-%m-%d %H:%M:%S')
     
     def should_stop_escalating(self, reminder_data: dict) -> bool:
         """

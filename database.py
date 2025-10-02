@@ -598,9 +598,9 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO daily_reminders (customer_id, reminder_date, reminder_time, message_sent)
-                VALUES (%s, %s, %s, %s)
-            ''', (customer_id, reminder_date, reminder_time, message_sent))
+                INSERT INTO daily_reminders (customer_id, reminder_date, reminder_time, message_sent, escalation_messages_sent)
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (customer_id, reminder_date, reminder_time, message_sent, '[]'))
             conn.commit()
             return cursor.lastrowid
     
@@ -758,8 +758,12 @@ class Database:
             
             if result:
                 # Handle NULL or empty values - initialize as empty list if None
-                messages_json = result[0] if result[0] is not None else '[]'
-                current_messages = json.loads(messages_json)
+                messages_json = result[0] if result[0] is not None and result[0].strip() else '[]'
+                try:
+                    current_messages = json.loads(messages_json)
+                except (json.JSONDecodeError, ValueError):
+                    current_messages = []
+                
                 current_messages.append({
                     'level': escalation_level,
                     'message': escalation_message,
