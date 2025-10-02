@@ -305,11 +305,11 @@ class ReminderLogic:
                     )
                     
                     # Set initial escalation time
-                    db.update_escalation_level(
+                    db.update_escalation(
                         reminder_id=daily_reminder_id,
                         escalation_level=0,
-                        escalation_message=reminder_message,
-                        next_escalation_time=next_escalation_time
+                        next_escalation_time=next_escalation_time,
+                        escalation_message=reminder_message
                     )
                     
                     print(f"📝 Created daily reminder record for {customer['phone_number']} (ID: {daily_reminder_id})")

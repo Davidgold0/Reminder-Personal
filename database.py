@@ -779,6 +779,28 @@ class Database:
             
             return False
     
+    def stop_escalations_for_customer(self, customer_id: int, reminder_date: str) -> bool:
+        """
+        Stop escalations for a customer on a specific date (when they confirm)
+        
+        Args:
+            customer_id: ID of the customer
+            reminder_date: Date of the reminder in YYYY-MM-DD format
+            
+        Returns:
+            True if updated successfully, False otherwise
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE daily_reminders 
+                SET next_escalation_time = NULL
+                WHERE customer_id = %s AND reminder_date = %s
+            ''', (customer_id, reminder_date))
+            
+            conn.commit()
+            return cursor.rowcount > 0
+    
     def get_escalation_stats(self, days_back: int = 30) -> Dict:
         """
         Get escalation statistics

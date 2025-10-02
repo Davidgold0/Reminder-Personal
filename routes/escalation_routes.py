@@ -59,11 +59,11 @@ def check_and_send_escalations():
                     )
                     
                     # Update database
-                    db.update_escalation_level(
+                    db.update_escalation(
                         reminder_id=reminder['id'],
                         escalation_level=reminder['escalation_level'] + 1,
-                        escalation_message=escalation_message,
-                        next_escalation_time=next_escalation_time
+                        next_escalation_time=next_escalation_time,
+                        escalation_message=escalation_message
                     )
                     
                     escalations_sent += 1
