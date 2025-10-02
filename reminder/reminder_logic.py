@@ -114,7 +114,7 @@ class ReminderLogic:
     
     def check_missed_reminders(self) -> bool:
         """
-        Check for missed reminders and send them if appropriate
+        Check for missed reminders and send them if appropriate (legacy method)
         
         Returns:
             True if a missed reminder was sent, False otherwise
@@ -150,6 +150,66 @@ class ReminderLogic:
         else:
             print(f"⏰ Too late to send missed reminder for {today} (time diff: {time_diff:.1f} hours)")
             return False
+
+    def check_missed_reminders_for_all_times(self, reminder_times: List[str]) -> int:
+        """
+        Check for missed reminders for each reminder time and send them if appropriate
+        
+        Args:
+            reminder_times: List of reminder times to check
+            
+        Returns:
+            Number of reminder times for which missed reminders were sent
+        """
+        now = datetime.now(self.utc_tz)
+        today = now.date()
+        missed_sent_count = 0
+        
+        print("🔍 Checking for missed reminders for each time...")
+        
+        for reminder_time in reminder_times:
+            try:
+                # Parse the reminder time
+                reminder_hour, reminder_minute = map(int, reminder_time.split(':'))
+                
+                # Create datetime for today's reminder time
+                reminder_datetime = datetime.combine(today, time(reminder_hour, reminder_minute)).replace(tzinfo=self.utc_tz)
+                
+                # Check if it's within 2 hours of the reminder time but past it
+                time_diff = (now - reminder_datetime).total_seconds() / 3600
+                
+                if 0 < time_diff <= 2:  # Past the reminder time but within 2 hours
+                    # Check if we already sent reminders for this time today
+                    db = Database()
+                    customers = db.get_customers_by_reminder_time(reminder_time)
+                    
+                    # Check if any customer already has a daily reminder record for today
+                    already_sent = False
+                    for customer in customers:
+                        existing_reminder = db.get_daily_reminder(customer['id'], today.isoformat())
+                        if existing_reminder:
+                            already_sent = True
+                            break
+                    
+                    if not already_sent and customers:
+                        print(f"📨 Sending missed reminder for {reminder_time} (time diff: {time_diff:.1f} hours)")
+                        if self.send_reminder(is_missed=True, specific_time=reminder_time):
+                            missed_sent_count += 1
+                    else:
+                        if already_sent:
+                            print(f"✅ Reminder for {reminder_time} already sent today")
+                        else:
+                            print(f"❌ No customers found for reminder time {reminder_time}")
+                else:
+                    if time_diff <= 0:
+                        print(f"⏰ Not time for {reminder_time} reminders yet (current: {now.strftime('%H:%M')}, {abs(time_diff):.1f} hours early)")
+                    else:
+                        print(f"⏰ Too late for {reminder_time} missed reminders (current: {now.strftime('%H:%M')}, {time_diff:.1f} hours past)")
+                        
+            except Exception as e:
+                print(f"❌ Error checking missed reminders for time {reminder_time}: {e}")
+        
+        return missed_sent_count
     
     def check_and_send_reminders_for_time(self, reminder_time: str) -> bool:
         """
@@ -377,21 +437,21 @@ class ReminderLogic:
             
             print(f"⏰ Found {len(reminder_times)} reminder times: {reminder_times}")
             
-            # Check for missed reminders first (legacy support)
-            missed_sent = self.check_missed_reminders()
-            
-            # Check each reminder time
+            # Check each reminder time - ONLY send if it's the right time
             reminders_sent = 0
             for reminder_time in reminder_times:
                 if self.check_and_send_reminders_for_time(reminder_time):
                     reminders_sent += 1
             
-            if missed_sent:
-                return {"status": "success", "message": "Missed reminder sent successfully", "type": "missed"}
-            elif reminders_sent > 0:
+            if reminders_sent > 0:
                 return {"status": "success", "message": f"Reminders sent for {reminders_sent} time(s)", "type": "daily"}
             else:
-                return {"status": "info", "message": "No reminders due at this time", "type": "none"}
+                # Check for missed reminders only if no current reminders were sent
+                missed_sent = self.check_missed_reminders_for_all_times(reminder_times)
+                if missed_sent > 0:
+                    return {"status": "success", "message": f"Missed reminders sent for {missed_sent} time(s)", "type": "missed"}
+                else:
+                    return {"status": "info", "message": "No reminders due at this time", "type": "none"}
                 
         except Exception as e:
             print(f"❌ Error processing reminder request: {e}")
